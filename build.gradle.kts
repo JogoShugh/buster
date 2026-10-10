@@ -2,7 +2,7 @@ import java.time.Instant
 import java.time.temporal.ChronoUnit
 
 plugins {
-    kotlin("jvm") version "2.0.20"
+    kotlin("jvm") version "2.0.21"
     id("io.gitlab.arturbosch.detekt") version "1.23.8"
 }
 
@@ -15,6 +15,13 @@ repositories {
 
 dependencies {
     implementation("com.fasterxml.jackson.core:jackson-databind:2.17.2")
+
+    // Plugins are *.buster.kts scripts, compiled at runtime by the Kotlin scripting host.
+    implementation("org.jetbrains.kotlin:kotlin-scripting-common:2.0.21")
+    implementation("org.jetbrains.kotlin:kotlin-scripting-jvm:2.0.21")
+    implementation("org.jetbrains.kotlin:kotlin-scripting-jvm-host:2.0.21")
+    implementation("org.jetbrains.kotlin:kotlin-scripting-compiler-embeddable:2.0.21")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
 
     // bdd-gates: Gherkin scenarios drive the work. Cucumber 7 fails undefined
     // steps by default; keep it that way so a new scenario goes red.
