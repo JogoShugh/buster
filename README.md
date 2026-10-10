@@ -115,10 +115,11 @@ For every exchange, Buster does this:
    may keep its own `Cache-Control` only by calling `keepCacheControl()`, and
    only if the body bytes are unchanged. The engine checks the bytes, so a
    plugin author cannot get this wrong.
-6. **Expect a reaction.** Each mutation declares what the client must do about it.
-   Buster judges that from the next requests the same client sends. One may
-   prove the client right, one may prove it wrong, or the window may run out.
-   So every plugin is also a conformance test.
+6. **Expect a reaction.** Each mutation declares what the client must do about it,
+   and what its silence means. Buster judges that from the next requests the same
+   client sends, and from the client's own event log. Every mutation ends as a
+   `pass`, a `pass (attested)` or a `FAIL`; there is no fourth verdict. So every
+   plugin is also a conformance test.
 7. **Log everything.** Every mutation and every verdict goes to a JSON Lines
    log with its seed and sequence number.
 
@@ -194,6 +195,7 @@ Inside `mutate { ... }`:
 | - | - |
 | `request`, `response`, `classification` | The exchange. The request is read-only. |
 | `random` | The seeded random source for this exchange. Use only this, so replay works. |
+| `future` | What this client sent after this request in the dry run (see [Campaigns](#campaigns-aiming-each-mutation)), or `null` with no dry run. Skip when the client never exercises the rule. |
 | `json()` / `writeJson(node)` | Read the body as a JSON object, write it back. |
 | `detail(text)` | What was changed, for the log. |
 | `skip(reason)` | Leave the response alone. The skip is logged. |
@@ -204,13 +206,59 @@ Inside `expect { ... }`:
 
 | Call | Meaning |
 | - | - |
+| `trigger` | The request whose response was mutated, so a plugin can judge the read that got the mutation. |
 | `onRequest { req -> outcome }` | Runs on each later request from the same client. |
-| `onExpire { outcome }` | Runs when `window` requests pass without an answer. |
-| `pass(reason)`, `fail(reason)`, `pending()`, `inconclusive(reason)` | The outcomes. |
+| `onEvent { event -> outcome }` | Runs on each line of the same client's event log. It can only `attest(reason)` a pass. |
+| `onExpire { decided }` | Required. What silence means: the client is done, or the round ended, and nothing settled it. It can only return `pass(reason)` or `fail(reason)`. |
+| `pass(reason)`, `fail(reason)`, `attest(reason)`, `pending()` | The outcomes. `pending()` is for `onRequest` and `onEvent` only. |
 
-When a run ends before a window fills, the expectation is closed. If the
-client sent no request at all in that time, the verdict is `inconclusive`:
-nothing proved it right or wrong.
+An expectation without `onExpire` is refused, and `onExpire { pending() }` does
+not compile. A check that could not be judged cannot be written, so a plugin
+has to decide what its silence means: for some rules a client that never
+exercises them has nothing to answer for (a pass); for others, never making
+the act the rule is about is the failure. Closing a window always runs that
+rule, even for a client that sent no request after the mutation.
+
+## Campaigns: aiming each mutation
+
+A mutation is only worth making where the client will exercise the rule it
+attacks. Mutate a response the client never uses and nobody can say what
+should have happened. A campaign aims each mutation from a dry run:
+
+1. **Record.** `POST /_buster/campaign/record`, then run the client's
+   scenarios once against the unmutated server. Buster keeps every client's
+   requests and responses, by the client's label (its `User-Agent`, which is
+   stable across runs; trace ids are not) and the request's position.
+2. **Plan.** `GET /_buster/campaign/plan` runs each plugin over each recorded
+   response in plan mode, with that client's later requests as `future`. A
+   plugin that does not apply calls `skip()`, and the plan says why. What is
+   left are combinations (client, request, plugin), grouped into rounds:
+   round k holds the k-th combination of each client, so one run mutates at
+   most one exchange of each client while their scenarios go on side by side.
+3. **Arm.** For each round: reset the server, `POST /_buster/campaign/arm?round=k`,
+   and run the same scenarios again. Only the armed exchanges are mutated,
+   matched by label and position. Unarmed clients, such as a readiness probe,
+   and unplanned requests pass through untouched. A window stays open until the
+   client sends `client.done` or the next round is armed.
+4. **Read the gate.** `GET /_buster/report` carries a `campaign` section: the
+   combinations each plugin got, the plugins that got none, a plugin by client
+   matrix of verdicts, and `ok`. A campaign fails on any FAIL, and on any plugin
+   with no combination. That is a coverage hole: the clients' scenarios never
+   exercise that rule, and it needs a new one. It is never skipped silently.
+
+`POST /_buster/campaign/off` returns to mutating by seed. With a plan in hand,
+the seed samples from the plan's combinations rather than from every response.
+
+Which dry-run requests arm each plugin:
+
+| Plugin | Armed where the client goes on to | Silence is |
+| - | - | - |
+| `relax-layer1-cache` | (always: judged on the read that got the response) | pass if that read said `no-cache`, else FAIL |
+| `drop-affordance` | act on an affordance of the resource: that one is dropped | pass; attested by `affordance.absent` |
+| `stale-etag` | act with `If-Match` equal to this ETag | FAIL: the act never came |
+| `alias-forms-href` | GET the forms link | FAIL: never followed it |
+| `strip-forms-integrity`, `drop-curie`, `lie-preference-applied` | follow the forms link | pass; attested by the client's event |
+| `flip-byte` | act using that set or schema | pass: never used the corrupted bytes |
 
 ## A sample for any JSON API
 
@@ -228,6 +276,10 @@ plugin("flaky-503") {
         if ("json" !in response.headers["Content-Type"].orEmpty()) skip("not JSON")
         val method = request.method
         val path = request.path
+        // Silence is a FAIL here, so only where the dry run shows the client going on to use this
+        // resource: there is then something it must not do after a 503.
+        val seen = future ?: skip("no dry run, so silence would be a guess")
+        if (seen.none { it.path == path }) skip("the client never goes on to use $path in its dry run")
         response.status = 503
         response.headers["Content-Type"] = "application/problem+json"
         response.headers["Retry-After"] = "1"
@@ -242,7 +294,7 @@ plugin("flaky-503") {
                     else -> pending()
                 }
             }
-            onExpire { inconclusive("never retried $path") }
+            onExpire { fail("never retried $path") }
         }
     }
 }
@@ -252,7 +304,7 @@ plugin("flaky-503") {
 | - | - |
 | retries the same request | pass |
 | changes the resource it never managed to read, such as `DELETE /todos/1` | FAIL |
-| moves on to something else | inconclusive |
+| moves on to something else | FAIL |
 
 Run it with `buster.plugins=samples`. A plain JSON API without ETags is all
 `OTHER` to the classifier, so this plugin can reach every successful JSON
@@ -274,7 +326,10 @@ judges the client from its next requests:
 | `alias-forms-href` | Adds a query the server did not write to the forms link | follows the link as given | requests the bare path, building the URL itself | §6.5 |
 | `relax-layer1-cache` | Sets Layer 1 to `private, max-age=3600` | reads the resource again with the request directive `Cache-Control: no-cache` | reads it again without that directive | §6.3 |
 
-A window that ends with no proof either way is `inconclusive`.
+Silence is decisive in every plugin. A client that never exercises a rule
+passes the plugins that attack a link it was never going to follow, and fails
+`stale-etag` and `alias-forms-href`, whose whole point is the act or the
+follow: they are made only where the dry run shows the client doing it.
 
 ### The client's event log
 
@@ -291,10 +346,8 @@ id, from the W3C `traceparent` the client sent. An event can only attest a
 pass, shown as `pass (attested)`, which the report keeps apart from a pass
 seen on the wire. A failure comes only from the wire, and nothing a client
 says can clear one. `client.done` closes that client's open windows with
-their expiry outcome, so a client that stops at the end of a scenario no
-longer leaves them `inconclusive`. The exception: a window that saw no
-request at all since its mutation closes as `inconclusive`. Nothing on the
-wire showed the client right, and "done" alone never makes a plain pass.
+their own expiry rule, so a client that stops at the end of a scenario is
+judged by what its silence means for each rule.
 
 Some judgements are approximations, and the scripts say so:
 
@@ -302,9 +355,10 @@ Some judgements are approximations, and the scripts say so:
   observable part: the client fetched those bytes because it needed them, so
   acting before it refetches means it used the corrupted copy.
 - `relax-layer1-cache` does not judge the act made straight after the read:
-  that read was the fresh check, and `If-Match` guards the act. A later read
-  that the client's own cache answers never reaches Buster, so it stays
-  `inconclusive`.
+  that read was the fresh check, and `If-Match` guards the act. It judges the
+  read that got the mutated response instead: `no-cache` on that read is the
+  pass, and its absence is a FAIL. A later read that the client's own cache
+  answers never reaches Buster, so it is not judged.
 - No plugin reads meaning from a URL. A request is tied to a resource only by
   equal paths, and an event to a request only by trace and span.
 - `alias-forms-href` relies on the server ignoring query parameters it does
@@ -417,7 +471,8 @@ git config core.hooksPath .githooks
 | Classifier | Built |
 | Engine, `no-store` rule, seeded selection, mutation log | Built |
 | Kotlin DSL and `*.buster.kts` script host (compile cache, reload, error reporting) | Built |
-| Verifier (expectations and verdicts) | Built |
+| Verifier (expectations, verdicts, `pass` / `pass (attested)` / `FAIL` only) | Built |
+| Campaigns (record, plan, arm, coverage gate) | Built |
 | H.E.A.R.T. pack | Built: all 8 |
 | Sample for any JSON API (`flaky-503`) | Built |
 | Folder watching (reload on change) | Planned; `PluginHost.reload()` exists |
