@@ -25,8 +25,11 @@ class Engine(
         verifier.observe(req)
     }
 
-    /** Ends the run: every open expectation gets a verdict now. */
-    fun flush() = verifier.flush()
+    /** Ends the run: the armed round is settled, and every open expectation gets a verdict now. */
+    fun flush() {
+        campaign.ledger.settle()
+        verifier.flush()
+    }
 
     /** A line of a client's event log (see [Verifier.event]). */
     fun event(e: ClientEvent) = verifier.event(e)
@@ -71,6 +74,7 @@ class Engine(
         val random = Random(seed xor (n * SEED_MIX))
         val known = campaign.futureOf(combo.label, combo.index)
         return apply(plugin, Exchange(req, res, classification, n), random, known)
+            ?.also { campaign.ledger.made(combo) }
     }
 
     private fun bySeed(
@@ -147,10 +151,16 @@ fun Engine.campaignReport(): CampaignReport {
         byPlugin.groupBy { it.record.label }.mapValues { (_, byLabel) -> byLabel.map { it.outcome.label } }
     }
     val failures = verdicts.count { it.outcome is Outcome.Fail }
-    val holes = plan?.holes.orEmpty()
+    // Coverage is what was made, once a round has run; before that, what the plan allows.
+    val planned = plan?.coverage.orEmpty()
+    val made = planned.keys.associateWith { campaign.ledger.madeCounts()[it] ?: 0 }
+    val coverage = if (campaign.ledger.roundsRun() > 0) made else planned
+    val holes = coverage.filterValues { it == 0 }.keys.sorted()
+    val misaligned = campaign.ledger.misaligned()
     return CampaignReport(
-        mode = campaign.mode, round = campaign.round, coverage = plan?.coverage.orEmpty(), holes = holes,
-        matrix = matrix, failures = failures, ok = plan != null && failures == 0 && holes.isEmpty(),
+        mode = campaign.mode, round = campaign.round, planned = planned, made = made, coverage = coverage,
+        holes = holes, misaligned = misaligned, matrix = matrix, failures = failures,
+        ok = plan != null && failures == 0 && holes.isEmpty() && misaligned.isEmpty(),
     )
 }
 
@@ -159,9 +169,15 @@ data class CampaignReport(
     val mode: Campaign.Mode,
     val round: Int,
     /** Combinations the plan holds for each plugin. */
+    val planned: Map<String, Int>,
+    /** Combinations actually made for each plugin, across the rounds run. */
+    val made: Map<String, Int>,
+    /** What the gate counts: made, once a round has run; planned before that. */
     val coverage: Map<String, Int>,
     /** Plugins with none: each is a hole, and needs a live scenario that exercises it. */
     val holes: List<String>,
+    /** Combinations a round armed and did not make. Any is a failure: the round proved nothing. */
+    val misaligned: List<Misaligned>,
     /** plugin, then client, then every verdict that pair got. */
     val matrix: Map<String, Map<String, List<String>>>,
     val failures: Int,

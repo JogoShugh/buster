@@ -241,11 +241,30 @@ should have happened. A campaign aims each mutation from a dry run:
    matched by label and position. Unarmed clients, such as a readiness probe,
    and unplanned requests pass through untouched. A window stays open until the
    client sends `client.done` or the next round is armed.
-4. **Read the gate.** `GET /_buster/report` carries a `campaign` section: the
-   combinations each plugin got, the plugins that got none, a plugin by client
-   matrix of verdicts, and `ok`. A campaign fails on any FAIL, and on any plugin
-   with no combination. That is a coverage hole: the clients' scenarios never
-   exercise that rule, and it needs a new one. It is never skipped silently.
+4. **Read the gate.** `GET /_buster/report?flush=true` carries a `campaign`
+   section: the combinations each plugin was planned and actually made, the
+   plugins that got none, a plugin by client matrix of verdicts, any
+   misaligned combination, and `ok`. A campaign fails on any FAIL, on any
+   plugin with no combination made (a coverage hole: no scenario exercises that
+   rule, and it needs a new one), and on any **misaligned** combination: one a
+   round armed and did not make, because the plugin skipped it at run time or no
+   request came at that position. The client did not do in the run what it did
+   in the dry run, so that round proves nothing. It is reported with the client,
+   the position, the plugin, the planned path and the live path (or "no
+   request"), and is never silent.
+
+Two things keep a run honest about what it judges:
+
+- **Clients that interact are not armed together.** Clients that overlap in
+  time and touch a common resource, with at least one write, are a group in the
+  plan, and a round arms at most one of them. Two clients of one scenario
+  acting on one bed would otherwise end each other's scenario. The groups come
+  from the dry run, not from anything in a client's name.
+- **A fresh representation replaces the mutated one.** Buster sends `no-store`
+  with a mutation, so the client keeps nothing of it. When the client enters the
+  resource again and is answered a whole, unmutated representation, the window on
+  the mutated one closes (`onSuperseded`): what the client does with the fresh
+  one is its own business.
 
 `POST /_buster/campaign/off` returns to mutating by seed. With a plan in hand,
 the seed samples from the plan's combinations rather than from every response.

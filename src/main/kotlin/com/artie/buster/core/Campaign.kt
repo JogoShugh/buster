@@ -24,6 +24,87 @@ data class Combination(
     val detail: String,
 )
 
+/**
+ * What the armed rounds reached and made. A combination armed and not made is misaligned: the
+ * plugin skipped it at run time, or no request came at that position.
+ */
+class Ledger {
+    private val reached = HashMap<Pair<String, Int>, String>()
+    private val made = HashSet<Pair<String, Int>>()
+    private val madeByPlugin = HashMap<String, Int>()
+    private val misses = mutableListOf<Misaligned>()
+    private var armed = emptyMap<Pair<String, Int>, Combination>()
+    private var open = false
+    private var rounds = 0
+
+    /** A round is armed with these combinations. */
+    @Synchronized
+    fun begin(round: Map<Pair<String, Int>, Combination>) {
+        reached.clear()
+        made.clear()
+        armed = round
+        open = true
+        rounds++
+    }
+
+    @Synchronized
+    fun reached(key: Pair<String, Int>, path: String) {
+        reached[key] = path
+    }
+
+    /** The plugin applied to the armed exchange: the combination was made. */
+    @Synchronized
+    fun made(combo: Combination) {
+        if (made.add(combo.label to combo.index)) madeByPlugin.merge(combo.plugin, 1, Int::plus)
+    }
+
+    /** Ends the round in progress: whatever it armed that was not made is misaligned. */
+    @Synchronized
+    fun settle() {
+        if (!open) return
+        open = false
+        armed.forEach { (key, combo) ->
+            if (key !in made) misses += Misaligned(combo.label, combo.index, combo.plugin, combo.path, reached[key])
+        }
+    }
+
+    @Synchronized
+    fun reset() {
+        reached.clear()
+        made.clear()
+        madeByPlugin.clear()
+        misses.clear()
+        open = false
+        rounds = 0
+    }
+
+    /** What the rounds settled so far armed and did not make. */
+    @Synchronized
+    fun misaligned(): List<Misaligned> = misses.toList()
+
+    /** Combinations made, for each plugin, across the rounds run. */
+    @Synchronized
+    fun madeCounts(): Map<String, Int> = madeByPlugin.toMap()
+
+    @Synchronized
+    fun roundsRun(): Int = rounds
+}
+
+/**
+ * A combination a round armed and did not make: the plugin skipped it at run time, or no request
+ * came at that position. The client did not do in the run what it did in the dry run, so the
+ * round says nothing about the rule it was meant to test.
+ */
+data class Misaligned(
+    val label: String,
+    val index: Int,
+    val plugin: String,
+    /** The path the dry run asked for at that position. */
+    val planned: String,
+    /** The path the run asked for there, or null when no request came. */
+    val live: String?,
+)
+
 /** A plugin that fitted a recorded response and then skipped it, with its reason. */
 data class Skipped(val label: String, val index: Int, val plugin: String, val reason: String)
 
@@ -82,6 +163,9 @@ class Campaign(
         private set
     private var armed = emptyMap<Pair<String, Int>, Combination>()
 
+    /** What the armed rounds reached and made, so what they did not make can be named. */
+    val ledger = Ledger()
+
     @Synchronized
     fun startRecording() {
         live.clear()
@@ -90,6 +174,7 @@ class Campaign(
         lastPlan = null
         armed = emptyMap()
         round = 0
+        ledger.reset()
         verifier.windowless = false
         mode = Mode.RECORDING
     }
@@ -110,8 +195,12 @@ class Campaign(
 
     /** The planned combination for this exchange, when a round is armed. */
     @Synchronized
-    fun armedFor(req: BusterRequest): Combination? =
-        if (mode == Mode.ARMED && !ignored(req)) armed[req.label to indexOf(req)] else null
+    fun armedFor(req: BusterRequest): Combination? {
+        if (mode != Mode.ARMED || ignored(req)) return null
+        val key = req.label to indexOf(req)
+        return armed[key]?.also { ledger.reached(key, req.path) }
+    }
+
 
     /** Combinations planned for this exchange, for a run that is not armed but has a plan. */
     @Synchronized
@@ -146,9 +235,11 @@ class Campaign(
     fun arm(number: Int): Int {
         val chosen = checkNotNull(lastPlan) { "no plan: record a dry run and plan it first" }
             .rounds.getOrNull(number - 1) ?: error("no round $number")
+        ledger.settle()
         verifier.flush()
         verifier.windowless = true
         armed = chosen.associateBy { it.label to it.index }
+        ledger.begin(armed)
         live.clear()
         liveTicks.clear()
         round = number
@@ -159,6 +250,7 @@ class Campaign(
     /** Back to mutating by seed. A plan, if there is one, still says where. */
     @Synchronized
     fun disarm() {
+        ledger.settle()
         verifier.flush()
         verifier.windowless = false
         armed = emptyMap()

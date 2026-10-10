@@ -153,6 +153,63 @@ Feature: A campaign aims every mutation where the client will exercise the rule
     And the plan has no coverage hole for "relax-layer1-cache"
     And the campaign is not ok
 
+  # A plan says what could be made. A round that made less than it armed says nothing about
+  # the rule it was meant to test, so the gate counts what was made, and names what was not.
+  Scenario: An armed combination the plugin skips at run time is misaligned
+    Given a campaign over the plugins "stale-etag"
+    And the campaign starts recording
+    And client "alice" requests GET "/beds/1" and gets an L1 Layer 1
+    And client "alice" requests PUT "/beds/1/name" with the original ETag and gets an L1 Layer 1
+    And the campaign is planned
+    And round 1 is armed
+    When client "alice" requests GET "/beds/1" and gets a plain JSON response
+    And the run ends
+    Then the campaign has 1 misaligned combination
+    And the misaligned combination is "stale-etag" for client "alice" on request 1, planned "/beds/1" and live "/beds/1"
+    And the campaign is not ok
+
+  Scenario: An armed combination no request reached is misaligned
+    Given a campaign over the plugins "stale-etag"
+    And the campaign starts recording
+    And client "alice" requests GET "/beds/1" and gets an L1 Layer 1
+    And client "alice" requests PUT "/beds/1/name" with the original ETag and gets an L1 Layer 1
+    And the campaign is planned
+    And round 1 is armed
+    When the run ends
+    Then the campaign has 1 misaligned combination
+    And the misaligned combination is "stale-etag" for client "alice" on request 1, planned "/beds/1" and live "no request"
+
+  Scenario: Arming the next round settles the one before
+    Given a campaign over the plugin pack
+    And the campaign starts recording
+    And client "alice" requests GET "/beds/1" and gets an L1 Layer 1
+    And client "alice" requests PUT "/beds/1/name" with the original ETag and gets an L1 Layer 1
+    And the campaign is planned
+    And round 1 is armed
+    When round 2 is armed
+    Then the campaign has 1 misaligned combination
+
+  Scenario: Coverage counts the combinations that were made
+    Given a campaign over the plugins "relax-layer1-cache"
+    And the campaign starts recording
+    And client "alice" requests GET "/beds/1" and gets an L1 Layer 1
+    And the campaign is planned
+    And round 1 is armed
+    When client "alice" requests GET "/beds/1" and gets an L1 Layer 1
+    And the run ends
+    Then "relax-layer1-cache" was made 1 time
+    And the campaign has 0 misaligned combinations
+
+  Scenario: A plugin that was planned but never made is a coverage hole
+    Given a campaign over the plugins "relax-layer1-cache"
+    And the campaign starts recording
+    And client "alice" requests GET "/beds/1" and gets an L1 Layer 1
+    And the campaign is planned
+    And round 1 is armed
+    When the run ends
+    Then the campaign has a coverage hole for "relax-layer1-cache"
+    And the campaign is not ok
+
   Scenario: A campaign is ok only with no FAIL and no hole
     Given a campaign over the plugins "relax-layer1-cache"
     And the campaign starts recording

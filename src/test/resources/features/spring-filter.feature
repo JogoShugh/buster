@@ -140,6 +140,16 @@ Feature: Buster runs as the first WebFilter in a Spring WebFlux server
     Then the report's campaign has a coverage hole for "stale-etag"
     And the report's campaign is not ok
 
+  Scenario: The report names what an armed round did not make
+    Given Buster runs with the plugin pack
+    When a client POSTs "/_buster/campaign/record"
+    And the client with User-Agent "ARTIE/0.5 (grow; first)" GETs "/beds/1"
+    And a client GETs "/_buster/campaign/plan"
+    And a client POSTs "/_buster/campaign/arm?round=1"
+    And a client GETs "/_buster/report?flush=true"
+    Then the report's campaign lists "relax-layer1-cache" as misaligned for client "ARTIE/0.5 (grow; first)"
+    And the report's campaign is not ok
+
   Scenario: The filter runs before every other filter
     Given Buster runs with a plugin that renames every bed to "Chewed"
     Then the Buster filter has the highest precedence

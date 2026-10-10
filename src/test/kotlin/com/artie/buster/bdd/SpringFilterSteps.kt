@@ -269,6 +269,12 @@ class SpringFilterSteps {
         assertTrue(plugin in holes) { String(body()) }
     }
 
+    @Then("the report's campaign lists {string} as misaligned for client {string}")
+    fun reportMisaligned(plugin: String, label: String) {
+        val missed = checkNotNull(Hal.parseObject(body())).path("campaign").path("misaligned")
+        assertTrue(missed.any { it["plugin"].asText() == plugin && it["label"].asText() == label }) { String(body()) }
+    }
+
     @Then("the report's campaign is not ok")
     fun reportNotOk() {
         assertFalse(checkNotNull(Hal.parseObject(body())).path("campaign").path("ok").asBoolean(true)) {

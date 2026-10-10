@@ -128,6 +128,33 @@ class CampaignSteps(private val world: World) {
     @Then("the plan has no coverage hole for {string}")
     fun noHole(plugin: String) = assertFalse(plugin in checkNotNull(plan).holes)
 
+    @Then("the campaign has {int} misaligned combination(s)")
+    fun misalignedCount(count: Int) = assertEquals(count, world.engine.campaignReport().misaligned.size) {
+        "${world.engine.campaignReport().misaligned}"
+    }
+
+    @Then(
+        "the misaligned combination is {string} for client {string} on request {int}, " +
+            "planned {string} and live {string}",
+    )
+    fun misalignedIs(plugin: String, client: String, request: Int, planned: String, live: String) {
+        val found = world.engine.campaignReport().misaligned.single()
+        assertEquals(plugin, found.plugin)
+        assertEquals(client, found.label)
+        assertEquals(request - 1, found.index)
+        assertEquals(planned, found.planned)
+        assertEquals(live, found.live ?: "no request")
+    }
+
+    @Then("{string} was made {int} time(s)")
+    fun madeTimes(plugin: String, times: Int) =
+        assertEquals(times, world.engine.campaignReport().made[plugin] ?: 0)
+
+    @Then("the campaign has a coverage hole for {string}")
+    fun campaignHole(plugin: String) = assertTrue(plugin in world.engine.campaignReport().holes) {
+        "${world.engine.campaignReport()}"
+    }
+
     @Then("the campaign is ok")
     fun ok() = assertTrue(world.engine.campaignReport().ok) { "${world.engine.campaignReport()}" }
 
@@ -167,7 +194,16 @@ class CampaignSteps(private val world: World) {
         "an L0 Layer 1" -> resource("resource-l0", null)
         "an affordance set" -> immutable("application/hal+json", "set-embedded-schemas")
         "a schema" -> immutable("application/schema+json", "schema")
+        "a plain JSON response" -> plainJson()
         else -> error("unknown response kind: $kind")
+    }
+
+    /** An answer from an ordinary JSON API: no ETag, so nothing for an ETag plugin to forge. */
+    private fun plainJson(): BusterResponse {
+        val headers = Headers()
+        headers["Content-Type"] = "application/json"
+        headers["Cache-Control"] = "no-cache"
+        return BusterResponse(200, headers, """{"id":1}""".toByteArray())
     }
 
     private fun resource(fixture: String, applied: String?): BusterResponse {

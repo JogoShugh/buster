@@ -162,8 +162,15 @@ class BusterWebFilter(
     private fun campaignJson(): Map<String, Any?> {
         val report = engine.campaignReport()
         return mapOf(
-            "mode" to report.mode.name, "round" to report.round, "coverage" to report.coverage,
-            "holes" to report.holes, "matrix" to report.matrix, "failures" to report.failures, "ok" to report.ok,
+            "mode" to report.mode.name, "round" to report.round, "planned" to report.planned,
+            "made" to report.made, "coverage" to report.coverage, "holes" to report.holes,
+            "misaligned" to report.misaligned.map {
+                mapOf(
+                    "label" to it.label, "index" to it.index, "plugin" to it.plugin,
+                    "planned" to it.planned, "live" to (it.live ?: "no request"),
+                )
+            },
+            "matrix" to report.matrix, "failures" to report.failures, "ok" to report.ok,
         )
     }
 
