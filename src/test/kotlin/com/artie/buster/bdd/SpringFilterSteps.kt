@@ -7,6 +7,7 @@ import com.artie.buster.core.MutationLog
 import com.artie.buster.core.Plugin
 import com.artie.buster.dsl.buster
 import com.artie.buster.spring.BusterAutoConfiguration
+import com.artie.buster.spring.BusterBanner
 import com.artie.buster.spring.BusterWebFilter
 import io.cucumber.java.en.Given
 import io.cucumber.java.en.Then
@@ -14,10 +15,14 @@ import io.cucumber.java.en.When
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.springframework.boot.SpringApplication
 import org.springframework.boot.autoconfigure.AutoConfigurations
 import org.springframework.boot.convert.DurationStyle
 import org.springframework.boot.test.context.runner.ApplicationContextRunner
 import org.springframework.core.Ordered
+import org.springframework.core.env.MapPropertySource
+import org.springframework.core.env.StandardEnvironment
+import org.springframework.core.io.DefaultResourceLoader
 import org.springframework.http.MediaType
 import org.springframework.test.web.reactive.server.EntityExchangeResult
 import org.springframework.test.web.reactive.server.WebTestClient
@@ -274,6 +279,38 @@ class SpringFilterSteps {
     @Then("the Buster filter holds each mutation for {long} ms")
     fun holds(ms: Long) = assertEquals(ms, contextPace?.toMillis())
 
+    private var environment = StandardEnvironment()
+
+    @Given("a Spring environment with profiles {string}")
+    fun springEnvironment(profiles: String) {
+        environment = StandardEnvironment()
+        environment.setActiveProfiles(*profiles.split(",").map { it.trim() }.toTypedArray())
+    }
+
+    @Given("a Spring environment with profiles {string} and {string}")
+    fun springEnvironmentWith(profiles: String, property: String) {
+        springEnvironment(profiles)
+        val (key, value) = property.split("=", limit = 2)
+        environment.propertySources.addFirst(MapPropertySource("test", mapOf(key to value)))
+    }
+
+    @When("Buster prepares the environment")
+    fun prepares() = BusterBanner().postProcessEnvironment(environment, SpringApplication())
+
+    @Then("the banner is Buster's terrier")
+    fun bustersBanner() {
+        val location = checkNotNull(environment.getProperty(BANNER_LOCATION))
+        val banner = DefaultResourceLoader().getResource(location)
+        assertTrue(banner.exists()) { "no banner at $location" }
+        assertTrue(banner.getContentAsString(Charsets.UTF_8).contains("Terrierizing Every Representation"))
+    }
+
+    @Then("the banner is not Buster's")
+    fun notBustersBanner() = assertEquals(null, environment.getProperty(BANNER_LOCATION))
+
+    @Then("the banner location is {string}")
+    fun bannerLocation(location: String) = assertEquals(location, environment.getProperty(BANNER_LOCATION))
+
     @Then("the Buster filter has the highest precedence")
     fun highestPrecedence() {
         assertEquals(Ordered.HIGHEST_PRECEDENCE, filter.order)
@@ -315,5 +352,6 @@ class SpringFilterSteps {
         val HAL: MediaType = MediaType.parseMediaType("application/hal+json")
         const val SPAN = "00f067aa0ba902b7"
         const val NANOS_PER_MILLI = 1_000_000L
+        const val BANNER_LOCATION = "spring.banner.location"
     }
 }

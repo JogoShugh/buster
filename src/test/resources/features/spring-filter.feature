@@ -96,6 +96,22 @@ Feature: Buster runs as the first WebFilter in a Spring WebFlux server
     Given a Spring context with profiles "buster", the plugin pack folder and "buster.pace=2s"
     Then the Buster filter holds each mutation for 2000 ms
 
+  # The banner says at a glance that this server's responses are being tampered with.
+  Scenario: Under the buster profile, Spring prints Buster's banner instead of its own
+    Given a Spring environment with profiles "buster"
+    When Buster prepares the environment
+    Then the banner is Buster's terrier
+
+  Scenario: Without the buster profile, the banner is left alone
+    Given a Spring environment with profiles "prod"
+    When Buster prepares the environment
+    Then the banner is not Buster's
+
+  Scenario: A server that chose its own banner keeps it
+    Given a Spring environment with profiles "buster" and "spring.banner.location=classpath:mine.txt"
+    When Buster prepares the environment
+    Then the banner location is "classpath:mine.txt"
+
   Scenario: The filter runs before every other filter
     Given Buster runs with a plugin that renames every bed to "Chewed"
     Then the Buster filter has the highest precedence
