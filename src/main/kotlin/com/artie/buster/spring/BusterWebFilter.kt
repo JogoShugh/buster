@@ -5,7 +5,7 @@ import com.artie.buster.core.BusterResponse
 import com.artie.buster.core.Engine
 import com.artie.buster.core.Hal
 import com.artie.buster.core.Headers
-import com.artie.buster.core.Outcome
+import com.artie.buster.core.fields
 import org.reactivestreams.Publisher
 import org.springframework.core.Ordered
 import org.springframework.core.io.buffer.DataBuffer
@@ -20,25 +20,35 @@ import org.springframework.web.server.WebFilter
 import org.springframework.web.server.WebFilterChain
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
+import java.time.Duration
 
 /**
  * The first filter in the chain, so no endpoint can opt out. Every request goes to the
  * verifier; every response body is buffered, handed to the engine, and written back with
- * a correct Content-Length. GET /_buster/report answers with the verdicts so far.
+ * a correct Content-Length. GET /_buster/report answers with the mutations and verdicts so
+ * far; GET /_buster is a live view of it for a browser.
+ *
+ * A non-zero [pace] holds each mutated response that long before it goes out, so a run can
+ * be watched case by case. Responses Buster leaves alone are never held.
  */
 class BusterWebFilter(
     private val engine: Engine,
     private val clientHeader: String = DEFAULT_CLIENT_HEADER,
+    val pace: Duration = Duration.ZERO,
 ) : WebFilter, Ordered {
 
     override fun getOrder() = Ordered.HIGHEST_PRECEDENCE
 
-    override fun filter(exchange: ServerWebExchange, chain: WebFilterChain): Mono<Void> {
-        if (exchange.request.path.value() == REPORT_PATH) return report(exchange)
-        val req = toBuster(exchange.request)
-        engine.request(req)
-        return chain.filter(exchange.mutate().response(Mutating(exchange.response, req)).build())
-    }
+    override fun filter(exchange: ServerWebExchange, chain: WebFilterChain): Mono<Void> =
+        when (exchange.request.path.value()) {
+            REPORT_PATH -> report(exchange)
+            VIEW_PATH -> write(exchange, MediaType.TEXT_HTML, LiveView.PAGE.toByteArray())
+            else -> {
+                val req = toBuster(exchange.request)
+                engine.request(req)
+                chain.filter(exchange.mutate().response(Mutating(exchange.response, req)).build())
+            }
+        }
 
     private inner class Mutating(delegate: ServerHttpResponse, private val req: BusterRequest) :
         ServerHttpResponseDecorator(delegate) {
@@ -47,17 +57,21 @@ class BusterWebFilter(
             DataBufferUtils.join(body)
                 .map { joined -> bytesOf(joined) }
                 .defaultIfEmpty(ByteArray(0))
-                .flatMap { bytes -> super.writeWith(Mono.just(bufferFactory().wrap(mutate(bytes)))) }
+                .flatMap { bytes ->
+                    val result = mutate(bytes)
+                    val out = super.writeWith(Mono.just(bufferFactory().wrap(result.body)))
+                    if (result.mutated && !pace.isZero) Mono.delay(pace).then(out) else out
+                }
 
         /** Runs the engine over the buffered response and copies the result back before commit. */
-        private fun mutate(bytes: ByteArray): ByteArray {
+        private fun mutate(bytes: ByteArray): Result {
             val res = BusterResponse(statusCode?.value() ?: OK, Headers(headers), bytes)
-            engine.respond(req, res)
+            val record = engine.respond(req, res)
             statusCode = HttpStatusCode.valueOf(res.status)
             headers.clear()
             res.headers.toMap().forEach { (name, values) -> headers[name] = values }
             headers.contentLength = res.body.size.toLong()
-            return res.body
+            return Result(res.body, record != null)
         }
 
         private fun bytesOf(buffer: DataBuffer): ByteArray {
@@ -71,6 +85,8 @@ class BusterWebFilter(
             writeWith(Flux.from(body).concatMap { it })
     }
 
+    private class Result(val body: ByteArray, val mutated: Boolean)
+
     private fun toBuster(request: ServerHttpRequest) = BusterRequest(
         method = request.method.name(),
         path = request.path.value(),
@@ -81,30 +97,36 @@ class BusterWebFilter(
             ?: "anonymous",
     )
 
+    /** JSON for people and tools; HTML rows when htmx asks, for the live view. */
     private fun report(exchange: ServerWebExchange): Mono<Void> {
         if (exchange.request.queryParams.getFirst("flush") == "true") engine.flush()
-        val verdicts = engine.verdicts().map { v ->
-            val (result, reason) = when (val o = v.outcome) {
-                is Outcome.Pass -> "pass" to o.reason
-                is Outcome.Fail -> "FAIL" to o.reason
-                is Outcome.Inconclusive -> "inconclusive" to o.reason
-                Outcome.Pending -> "pending" to ""
-            }
-            mapOf(
-                "seq" to v.record.seq, "client" to v.record.clientId, "plugin" to v.record.plugin,
-                "expectation" to v.expectation, "result" to result, "reason" to reason,
-            )
+        val mutations = engine.mutations()
+        val verdicts = engine.verdicts()
+        if (exchange.request.headers.getFirst(HX_REQUEST) == "true") {
+            val rows = LiveView.rows(engine.seed, pace.toMillis(), mutations, verdicts)
+            return write(exchange, MediaType.TEXT_HTML, rows.toByteArray())
         }
-        val body = Hal.mapper.writeValueAsBytes(mapOf("seed" to engine.seed, "verdicts" to verdicts))
+        val body = Hal.mapper.writeValueAsBytes(
+            mapOf(
+                "seed" to engine.seed, "paceMs" to pace.toMillis(),
+                "mutations" to mutations.map { it.fields() }, "verdicts" to verdicts.map { it.fields() },
+            ),
+        )
+        return write(exchange, MediaType.APPLICATION_JSON, body)
+    }
+
+    private fun write(exchange: ServerWebExchange, type: MediaType, body: ByteArray): Mono<Void> {
         val response = exchange.response
-        response.headers.contentType = MediaType.APPLICATION_JSON
+        response.headers.contentType = type
         response.headers.cacheControl = "no-store"
         return response.writeWith(Mono.just(response.bufferFactory().wrap(body)))
     }
 
     companion object {
         const val REPORT_PATH = "/_buster/report"
+        const val VIEW_PATH = "/_buster"
         const val DEFAULT_CLIENT_HEADER = "X-Buster-Client"
+        private const val HX_REQUEST = "HX-Request"
         private const val OK = 200
     }
 }

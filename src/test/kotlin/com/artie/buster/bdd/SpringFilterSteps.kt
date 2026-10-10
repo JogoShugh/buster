@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.springframework.boot.autoconfigure.AutoConfigurations
+import org.springframework.boot.convert.DurationStyle
 import org.springframework.boot.test.context.runner.ApplicationContextRunner
 import org.springframework.core.Ordered
 import org.springframework.http.MediaType
@@ -23,6 +24,7 @@ import org.springframework.test.web.reactive.server.WebTestClient
 import org.springframework.web.reactive.function.server.RouterFunction
 import org.springframework.web.reactive.function.server.RouterFunctions
 import org.springframework.web.reactive.function.server.ServerResponse
+import java.time.Duration
 
 class SpringFilterSteps {
     private var routes: RouterFunction<ServerResponse>? = null
@@ -32,6 +34,9 @@ class SpringFilterSteps {
     private lateinit var result: EntityExchangeResult<ByteArray>
     private lateinit var lastPath: String
     private var hasFilter = false
+    private var pace: Duration = Duration.ZERO
+    private var tookMs = 0L
+    private var contextPace: Duration? = null
 
     @Given("a WebFlux server whose {string} answers a Layer 1 bed")
     fun bedRoute(path: String) {
@@ -85,11 +90,17 @@ class SpringFilterSteps {
     @When("client {string} GETs {string}")
     fun getAs(clientId: String, path: String) = fetch(clientId, path)
 
-    private fun fetch(clientId: String?, path: String) {
+    @When("htmx GETs {string}")
+    fun getAsHtmx(path: String) = fetch(null, path, mapOf("HX-Request" to "true"))
+
+    private fun fetch(clientId: String?, path: String, headers: Map<String, String> = emptyMap()) {
         lastPath = path
         val spec = client.get().uri(path)
         clientId?.let { spec.header(BusterWebFilter.DEFAULT_CLIENT_HEADER, it) }
+        headers.forEach { (name, value) -> spec.header(name, value) }
+        val started = System.nanoTime()
         result = spec.exchange().expectBody(ByteArray::class.java).returnResult()
+        tookMs = (System.nanoTime() - started) / NANOS_PER_MILLI
     }
 
     @Then("the client receives a bed named {string}")
@@ -120,6 +131,75 @@ class SpringFilterSteps {
         }
     }
 
+    @Given("Buster paces mutations at {string}")
+    fun pacing(value: String) {
+        pace = DurationStyle.detectAndParse(value)
+    }
+
+    @Then("the response took at least {long} ms")
+    fun tookAtLeast(ms: Long) = assertTrue(tookMs >= ms) { "took $tookMs ms" }
+
+    @Then("the response took less than {long} ms")
+    fun tookLessThan(ms: Long) = assertTrue(tookMs < ms) { "took $tookMs ms" }
+
+    @Then("the report lists mutation {long} by {string} on {string} for client {string}")
+    fun reportMutation(seq: Long, plugin: String, path: String, clientId: String) {
+        val mutations = checkNotNull(Hal.parseObject(body())).path("mutations").toList()
+        assertTrue(
+            mutations.any {
+                it["seq"].asLong() == seq && it["plugin"].asText() == plugin &&
+                    it["path"].asText() == path && it["client"].asText() == clientId
+            },
+        ) { "mutations: $mutations" }
+    }
+
+    @Then("the client receives an HTML representation that polls {string} with htmx")
+    fun liveView(reportPath: String) {
+        assertTrue(result.responseHeaders.contentType?.isCompatibleWith(MediaType.TEXT_HTML) == true)
+        val html = String(body())
+        assertTrue(html.contains("htmx.org@")) { "no htmx script" }
+        assertTrue(Regex("""hx-get="${Regex.escape(reportPath)}"[^>]*hx-trigger="[^"]*every""").containsMatchIn(html)) {
+            "nothing polls $reportPath"
+        }
+    }
+
+    @Then("the client receives an HTML fragment with a {string} verdict for plugin {string}")
+    fun fragmentVerdict(verdict: String, plugin: String) {
+        assertTrue(result.responseHeaders.contentType?.isCompatibleWith(MediaType.TEXT_HTML) == true)
+        val row = Regex("""<tr data-plugin="${Regex.escape(plugin)}">.*?</tr>""").find(String(body()))?.value
+        assertTrue(row?.contains("""class="verdict $verdict">$verdict<""") == true) { "row: $row" }
+    }
+
+    @Then("the HTML fragment shows {string} and never {string}")
+    fun escaped(shown: String, never: String) {
+        val html = String(body())
+        assertTrue(html.contains(shown) && !html.contains(never)) { html }
+    }
+
+    @Given("Buster runs with a plugin that notes {string}")
+    fun noting(note: String) = start(
+        buster {
+            plugin("noter") {
+                on(Layer.RESOURCE)
+                mutate { detail(note) }
+            }
+        },
+    )
+
+    @Given("a Spring context with profiles {string}, the plugin pack folder and {string}")
+    fun contextWith(profiles: String, property: String) {
+        ApplicationContextRunner()
+            .withConfiguration(AutoConfigurations.of(BusterAutoConfiguration::class.java))
+            .withPropertyValues("buster.plugins=plugins", "spring.profiles.active=$profiles", property)
+            .run { context ->
+                assertEquals(null, context.startupFailure)
+                contextPace = context.getBean(BusterWebFilter::class.java).pace
+            }
+    }
+
+    @Then("the Buster filter holds each mutation for {long} ms")
+    fun holds(ms: Long) = assertEquals(ms, contextPace?.toMillis())
+
     @Then("the Buster filter has the highest precedence")
     fun highestPrecedence() {
         assertEquals(Ordered.HIGHEST_PRECEDENCE, filter.order)
@@ -149,7 +229,7 @@ class SpringFilterSteps {
     }
 
     private fun start(plugins: List<Plugin>) {
-        filter = BusterWebFilter(Engine(plugins, 1, MutationLog()))
+        filter = BusterWebFilter(Engine(plugins, 1, MutationLog()), pace = pace)
         client = WebTestClient.bindToRouterFunction(checkNotNull(routes))
             .webFilter<WebTestClient.RouterFunctionSpec>(filter)
             .build()
@@ -159,5 +239,6 @@ class SpringFilterSteps {
 
     private companion object {
         val HAL: MediaType = MediaType.parseMediaType("application/hal+json")
+        const val NANOS_PER_MILLI = 1_000_000L
     }
 }

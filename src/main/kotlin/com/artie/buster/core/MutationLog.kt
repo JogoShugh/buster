@@ -18,6 +18,18 @@ data class MutationRecord(
     val layer: Layer,
     val rung: Rung,
     val detail: String,
+) {
+    /** The record as the log and the report write it. */
+    fun fields(): Map<String, Any?> = mapOf(
+        "seq" to seq, "seed" to seed, "client" to clientId, "method" to method, "path" to path,
+        "plugin" to plugin, "spec" to spec, "layer" to layer.name, "rung" to rung.name, "detail" to detail,
+    )
+}
+
+/** The verdict as the log and the report write it. */
+fun Verdict.fields(): Map<String, Any?> = mapOf(
+    "seq" to record.seq, "client" to record.clientId, "plugin" to record.plugin,
+    "expectation" to expectation, "result" to outcome.label, "reason" to outcome.reason,
 )
 
 /**
@@ -27,34 +39,15 @@ data class MutationRecord(
 class MutationLog(private val file: Path? = null, private val echo: (String) -> Unit = {}) {
     private val lines = ArrayDeque<String>()
 
-    fun mutation(r: MutationRecord) = write(
-        mapOf(
-            "event" to "mutation", "at" to Instant.now().toString(), "seq" to r.seq, "seed" to r.seed,
-            "client" to r.clientId, "method" to r.method, "path" to r.path, "plugin" to r.plugin,
-            "spec" to r.spec, "layer" to r.layer.name, "rung" to r.rung.name, "detail" to r.detail,
-        ),
-    )
+    fun mutation(r: MutationRecord) = write("mutation", r.fields())
 
-    fun verdict(v: Verdict) {
-        val (result, reason) = when (val o = v.outcome) {
-            is Outcome.Pass -> "pass" to o.reason
-            is Outcome.Fail -> "FAIL" to o.reason
-            is Outcome.Inconclusive -> "inconclusive" to o.reason
-            Outcome.Pending -> "pending" to ""
-        }
-        write(
-            mapOf(
-                "event" to "verdict", "at" to Instant.now().toString(), "seq" to v.record.seq,
-                "client" to v.record.clientId, "plugin" to v.record.plugin,
-                "expectation" to v.expectation, "result" to result, "reason" to reason,
-            ),
-        )
-    }
+    fun verdict(v: Verdict) = write("verdict", v.fields())
 
-    fun note(message: String) = write(mapOf("event" to "note", "at" to Instant.now().toString(), "message" to message))
+    fun note(message: String) = write("note", mapOf("message" to message))
 
     @Synchronized
-    private fun write(entry: Map<String, Any?>) {
+    private fun write(event: String, fields: Map<String, Any?>) {
+        val entry = mapOf("event" to event, "at" to Instant.now().toString()) + fields
         val line = Hal.mapper.writeValueAsString(entry)
         lines.addLast(line)
         while (lines.size > MAX_IN_MEMORY) lines.removeFirst()

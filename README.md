@@ -220,9 +220,19 @@ the `buster` profile turns it on.
 | `buster.seed` | The run's seed. Unset means a random one, logged for replay. | random |
 | `buster.log` | A file for the JSON Lines log | in memory only |
 | `buster.client-header` | The header that names the client, so expectations are judged per client | `X-Buster-Client` |
+| `buster.pace` | Slow motion: how long to hold each mutated response, such as `2s`. Responses Buster leaves alone are never held. | `0s` |
 
-`GET /_buster/report` returns the seed and the verdicts so far.
-`GET /_buster/report?flush=true` ends the run first, closing open windows.
+### Watching a run
+
+Open `/_buster` in a browser for the live view. It is a small htmx page:
+every second it asks `/_buster/report` for HTML, and the server renders one
+row per mutation, newest first, with its verdicts as they land. **End run**
+closes every open expectation. With `buster.pace` set, the mutations arrive
+one at a time, slow enough to follow.
+
+`GET /_buster/report` returns the seed, the pace, the mutations and the
+verdicts so far as JSON. `?flush=true` ends the run first. A request with
+`HX-Request: true` gets the HTML rows instead.
 
 ## Layout
 

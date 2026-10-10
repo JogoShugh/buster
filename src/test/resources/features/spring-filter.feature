@@ -33,6 +33,52 @@ Feature: Buster runs as the first WebFilter in a Spring WebFlux server
     And a client GETs "/_buster/report?flush=true"
     Then the report shows an inconclusive verdict for client "artie"
 
+  Scenario: The report lists each mutation as it happens
+    Given Buster runs with a plugin that renames every bed to "Chewed"
+    When client "artie" GETs "/beds/1"
+    And a client GETs "/_buster/report"
+    Then the report lists mutation 1 by "rename" on "/beds/1" for client "artie"
+
+  # The live view is htmx: the shell polls the report, and the server renders the rows.
+  Scenario: A live view of the report, for a browser
+    Given Buster runs with a plugin that renames every bed to "Chewed"
+    When a client GETs "/_buster"
+    Then the client receives an HTML representation that polls "/_buster/report" with htmx
+    And the response has Cache-Control "no-store"
+
+  Scenario: htmx gets the report as HTML rows
+    Given Buster runs with a plugin that expects no GET of "/forbidden"
+    When client "artie" GETs "/beds/1"
+    And client "artie" GETs "/forbidden"
+    And htmx GETs "/_buster/report"
+    Then the client receives an HTML fragment with a "FAIL" verdict for plugin "forbid"
+    And the response has Cache-Control "no-store"
+
+  Scenario: The report escapes what it shows
+    Given Buster runs with a plugin that notes "<script>alert(1)</script>"
+    When a client GETs "/beds/1"
+    And htmx GETs "/_buster/report"
+    Then the HTML fragment shows "&lt;script&gt;" and never "<script>"
+
+  # Slow motion: a pace holds every mutated response before it goes out, so a person
+  # can watch a run case by case in the live view.
+  Scenario: A pace holds each mutated response
+    Given Buster paces mutations at "300ms"
+    And Buster runs with a plugin that renames every bed to "Chewed"
+    When a client GETs "/beds/1"
+    Then the client receives a bed named "Chewed"
+    And the response took at least 300 ms
+
+  Scenario: A pace does not hold a response Buster leaves alone
+    Given Buster paces mutations at "300ms"
+    And Buster runs with a plugin that renames every bed to "Chewed"
+    When a client GETs "/missing"
+    Then the response took less than 300 ms
+
+  Scenario: The pace comes from the buster.pace property
+    Given a Spring context with profiles "buster", the plugin pack folder and "buster.pace=2s"
+    Then the Buster filter holds each mutation for 2000 ms
+
   Scenario: The filter runs before every other filter
     Given Buster runs with a plugin that renames every bed to "Chewed"
     Then the Buster filter has the highest precedence

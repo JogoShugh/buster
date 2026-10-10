@@ -11,6 +11,7 @@ import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Profile
 import org.springframework.web.server.WebFilter
 import java.nio.file.Path
+import java.time.Duration
 import kotlin.random.Random
 
 /** Settings under `buster.*`. */
@@ -27,6 +28,9 @@ class BusterProperties {
 
     /** The request header that names the client, for judging expectations per client. */
     var clientHeader: String = BusterWebFilter.DEFAULT_CLIENT_HEADER
+
+    /** Slow motion: how long to hold each mutated response, such as 2s. Zero holds nothing. */
+    var pace: Duration = Duration.ZERO
 }
 
 /**
@@ -53,5 +57,5 @@ class BusterAutoConfiguration {
 
     @Bean
     fun busterWebFilter(engine: Engine, properties: BusterProperties) =
-        BusterWebFilter(engine, properties.clientHeader)
+        BusterWebFilter(engine, properties.clientHeader, properties.pace)
 }

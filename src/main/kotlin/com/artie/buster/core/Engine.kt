@@ -23,14 +23,20 @@ class Engine(
 
     fun verdicts(): List<Verdict> = verifier.verdicts()
 
-    fun respond(req: BusterRequest, res: BusterResponse) {
+    /** The mutations applied so far, oldest first; the most recent [MAX_KEPT] only. */
+    fun mutations(): List<MutationRecord> = synchronized(applied) { applied.toList() }
+
+    private val applied = ArrayDeque<MutationRecord>()
+
+    /** Mutates [res] in place. Returns the mutation's record, or null when the response was left alone. */
+    fun respond(req: BusterRequest, res: BusterResponse): MutationRecord? {
         val classification = Classifier.classify(res)
         val candidates = plugins.filter { it.appliesTo(classification) }
-        if (classification.layer == Layer.OTHER || candidates.isEmpty()) return
+        if (classification.layer == Layer.OTHER || candidates.isEmpty()) return null
         val n = seq.incrementAndGet()
         // One random source per exchange: replay needs only the seed and the sequence number.
         val random = Random(seed xor (n * MIX))
-        apply(pick(candidates, random), Exchange(req, res, classification, n), random)
+        return apply(pick(candidates, random), Exchange(req, res, classification, n), random)
     }
 
     private class Exchange(
@@ -48,7 +54,7 @@ class Engine(
         }
     }
 
-    private fun apply(plugin: Plugin, ex: Exchange, random: Random) {
+    private fun apply(plugin: Plugin, ex: Exchange, random: Random): MutationRecord? {
         // The plugin works on a copy, so a skip leaves the real response exactly as it was.
         val work = ex.res.copy()
         val scope = MutationScope(ex.req, work, ex.classification, random)
@@ -56,7 +62,7 @@ class Engine(
             plugin.mutate(scope)
         } catch (skip: SkipMutation) {
             log.note("${plugin.name} skipped: ${skip.reason}")
-            return
+            return null
         }
         // A corrupted response must never reach a shared cache. The engine enforces this,
         // not the plugin author: a plugin keeps its Cache-Control only over unchanged bytes.
@@ -71,10 +77,17 @@ class Engine(
             detail = scope.details.joinToString("; "),
         )
         log.mutation(record)
+        synchronized(applied) {
+            applied.addLast(record)
+            while (applied.size > MAX_KEPT) applied.removeFirst()
+        }
         scope.expectations.forEach { verifier.register(record, it) }
+        return record
     }
 
     private companion object {
+        const val MAX_KEPT = 1_000
+
         /** Spreads consecutive sequence numbers across the seed space. */
         const val MIX = -0x61c8864680b583ebL
     }

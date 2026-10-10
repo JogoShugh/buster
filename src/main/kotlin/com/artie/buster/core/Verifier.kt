@@ -1,13 +1,18 @@
 package com.artie.buster.core
 
 /** Result of checking one expectation against one request, or at the end of its window. */
-sealed class Outcome {
-    data object Pending : Outcome()
-    data class Pass(val reason: String) : Outcome()
-    data class Fail(val reason: String) : Outcome()
+sealed class Outcome(
+    /** How the log and the report name this outcome. A failure is in capitals so it stands out. */
+    val label: String,
+) {
+    open val reason: String get() = ""
+
+    data object Pending : Outcome("pending")
+    data class Pass(override val reason: String) : Outcome("pass")
+    data class Fail(override val reason: String) : Outcome("FAIL")
 
     /** The client never did anything that could prove it right or wrong. */
-    data class Inconclusive(val reason: String) : Outcome()
+    data class Inconclusive(override val reason: String) : Outcome("inconclusive")
 }
 
 /**
