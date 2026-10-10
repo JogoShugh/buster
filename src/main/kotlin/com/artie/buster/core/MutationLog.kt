@@ -35,6 +35,22 @@ class MutationLog(private val file: Path? = null, private val echo: (String) -> 
         ),
     )
 
+    fun verdict(v: Verdict) {
+        val (result, reason) = when (val o = v.outcome) {
+            is Outcome.Pass -> "pass" to o.reason
+            is Outcome.Fail -> "FAIL" to o.reason
+            is Outcome.Inconclusive -> "inconclusive" to o.reason
+            Outcome.Pending -> "pending" to ""
+        }
+        write(
+            mapOf(
+                "event" to "verdict", "at" to Instant.now().toString(), "seq" to v.record.seq,
+                "client" to v.record.clientId, "plugin" to v.record.plugin,
+                "expectation" to v.expectation, "result" to result, "reason" to reason,
+            ),
+        )
+    }
+
     fun note(message: String) = write(mapOf("event" to "note", "at" to Instant.now().toString(), "message" to message))
 
     @Synchronized

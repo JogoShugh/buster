@@ -34,6 +34,7 @@ class MutationScope(
     val random: Random,
 ) {
     internal val details = mutableListOf<String>()
+    internal val expectations = mutableListOf<Expectation>()
     internal var keepsCacheControl = false
 
     fun json(): ObjectNode? = Hal.parseObject(response.body)
@@ -51,5 +52,10 @@ class MutationScope(
     /** Honoured only when the body bytes are unchanged; otherwise the engine still sends no-store. */
     fun keepCacheControl() {
         keepsCacheControl = true
+    }
+
+    /** What the client must do next, judged over its next [window] requests. */
+    fun expect(description: String, window: Int, block: ExpectationBuilder.() -> Unit) {
+        expectations += ExpectationBuilder(description, window).apply(block).build()
     }
 }

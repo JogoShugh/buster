@@ -11,8 +11,17 @@ class Engine(
     private val plugins: List<Plugin>,
     val seed: Long,
     private val log: MutationLog,
+    private val verifier: Verifier = Verifier(log),
 ) {
     private val seq = AtomicLong()
+
+    /** Every inbound request goes to the verifier before the server sees it. */
+    fun request(req: BusterRequest) = verifier.observe(req)
+
+    /** Ends the run: every open expectation gets a verdict now. */
+    fun flush() = verifier.flush()
+
+    fun verdicts(): List<Verdict> = verifier.verdicts()
 
     fun respond(req: BusterRequest, res: BusterResponse) {
         val classification = Classifier.classify(res)
@@ -55,14 +64,14 @@ class Engine(
             work.headers["Cache-Control"] = "no-store"
         }
         ex.res.replaceWith(work)
-        log.mutation(
-            MutationRecord(
-                seq = ex.seq, seed = seed, clientId = ex.req.clientId, method = ex.req.method,
-                path = ex.req.path, plugin = plugin.name, spec = plugin.spec,
-                layer = ex.classification.layer, rung = ex.classification.rung,
-                detail = scope.details.joinToString("; "),
-            ),
+        val record = MutationRecord(
+            seq = ex.seq, seed = seed, clientId = ex.req.clientId, method = ex.req.method,
+            path = ex.req.path, plugin = plugin.name, spec = plugin.spec,
+            layer = ex.classification.layer, rung = ex.classification.rung,
+            detail = scope.details.joinToString("; "),
         )
+        log.mutation(record)
+        scope.expectations.forEach { verifier.register(record, it) }
     }
 
     private companion object {
