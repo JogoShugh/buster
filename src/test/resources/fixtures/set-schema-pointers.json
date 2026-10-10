@@ -1,0 +1,9 @@
+{
+  "_forms": {
+    "rename": {
+      "_links": { "target": { "href": "/beds/{id}/name" } },
+      "method": "PUT",
+      "schema": { "$ref": "/schemas/sha256-def" }
+    }
+  }
+}

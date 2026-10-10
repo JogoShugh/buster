@@ -1,0 +1,8 @@
+{
+  "name": "North bed",
+  "_links": {
+    "self": { "href": "/beds/1" },
+    "curies": [{ "name": "hr", "href": "https://github.com/jogoshugh/heart-rise/rels/{rel}", "templated": true }],
+    "hr:forms": { "href": "/forms/sha256-abc", "integrity": "sha256-abc" }
+  }
+}
