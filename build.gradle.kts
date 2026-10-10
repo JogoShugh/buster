@@ -23,6 +23,18 @@ dependencies {
     implementation("org.jetbrains.kotlin:kotlin-scripting-compiler-embeddable:2.0.21")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
 
+    // The Spring adapter compiles against the host server's Spring; it brings none of its own.
+    // Same Boot line as server-spring.
+    compileOnly(platform("org.springframework.boot:spring-boot-dependencies:3.3.4"))
+    compileOnly("org.springframework:spring-webflux")
+    compileOnly("org.springframework.boot:spring-boot-autoconfigure")
+    testImplementation(platform("org.springframework.boot:spring-boot-dependencies:3.3.4"))
+    testImplementation("org.springframework:spring-webflux")
+    testImplementation("org.springframework:spring-test")
+    testImplementation("org.springframework.boot:spring-boot-test")
+    testImplementation("org.assertj:assertj-core")
+    testImplementation("org.springframework.boot:spring-boot-autoconfigure")
+
     // bdd-gates: Gherkin scenarios drive the work. Cucumber 7 fails undefined
     // steps by default; keep it that way so a new scenario goes red.
     testImplementation(platform("io.cucumber:cucumber-bom:7.18.0"))
