@@ -39,6 +39,12 @@ class MutationScope(
      */
     val future: List<BusterRequest>? = null,
 ) {
+    /**
+     * The path of the resource this response is the state of: Content-Location, else the HAL
+     * self link, else the request path. For an act's response it is the resource, not the action.
+     */
+    val resourcePath: String = Resource.pathOf(request, response)
+
     internal val details = mutableListOf<String>()
     internal val expectations = mutableListOf<Expectation>()
     internal var keepsCacheControl = false

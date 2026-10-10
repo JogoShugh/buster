@@ -105,3 +105,32 @@ Feature: The first plugin pack attacks the client rules the spec names
     And an L0 Layer 1 response goes out to client "artie"
     When client "artie" finds the dropped affordance "harvest" gone on a re-read, and reports "affordance.absent"
     Then "drop-affordance" has no verdict yet
+
+  # An act answers at the action URL, but its response is the resource's new state.
+  # Content-Location (RFC 9110 §8.7) names the resource, the HAL self link says it too.
+  # Reading the action URL as "the resource" would make a plugin wait for a GET of a
+  # URL no client reads, and judge a write as if it were a read.
+  Scenario Outline: <plugin>: an act's response is judged by the resource it names, not the action URL
+    Given only the "<plugin>" plugin from the pack
+    And the dry run of that client sends <future>
+    And <response> goes out to client "artie"
+    When client "artie" sends <requests>
+    And the run ends
+    Then the verdict for "<plugin>" is <result>
+
+    Examples:
+      | plugin                 | future                                   | response                               | requests                                            | result |
+      | stale-etag             | PUT /beds/1/name with the original ETag  | an L1 act response naming "/beds/1"    | PUT /beds/1/name with the mutated ETag, GET /beds/1 | pass   |
+      | stale-etag             | PUT /beds/1/name with the original ETag  | an L1 act response with only a self link | PUT /beds/1/name with the mutated ETag, GET /beds/1 | pass   |
+      | relax-layer1-cache     | GET /beds/1                              | an L1 act response naming "/beds/1"    | GET /beds/1 with no-cache                           | pass   |
+      | relax-layer1-cache     | GET /beds/1                              | an L1 act response naming "/beds/1"    | GET /beds/1                                         | FAIL   |
+      | relax-layer1-cache     | GET /beds/1                              | an L1 act response naming "/beds/1"    | nothing                                             | pass   |
+      | lie-preference-applied | GET the forms link                       | an L1 act response naming "/beds/1"    | GET /beds/1, PUT /beds/1/name                       | pass   |
+
+  Scenario: relax-layer1-cache is not made on an act's response nobody reads again
+    An act is a write, so it carries no Cache-Control directive to judge. The rule is
+    about reading the resource again, so it is made only where the client does.
+    Given only the "relax-layer1-cache" plugin from the pack
+    And the dry run of that client sends PUT /beds/1/name
+    And an L1 act response naming "/beds/1" goes out to client "artie"
+    Then the response went out unchanged

@@ -40,6 +40,24 @@ class World {
     fun immutableGoesOut(path: String, client: String, contentType: String, body: String) =
         goesOut(path, client, BusterResponse(200, headers(contentType, IMMUTABLE), body.toByteArray()))
 
+    /**
+     * The response to a PUT of a bed's name: its new state, answered at the action URL. A server
+     * that follows RFC 9110 §8.7 names the bed in Content-Location.
+     */
+    fun actGoesOut(client: String, contentLocation: String?, applied: String, body: String) {
+        val headers = headers("application/hal+json", "no-cache")
+        headers["ETag"] = "\"s1\""
+        headers["Preference-Applied"] = applied
+        contentLocation?.let { headers["Content-Location"] = it }
+        engine = Engine(plugins, 1, log)
+        original = BusterResponse(200, headers, body.toByteArray()).copy()
+        response = BusterResponse(200, headers, body.toByteArray())
+        lastPath = ACT_PATH
+        val ifMatch = Headers().also { it["If-Match"] = "\"s1\"" }
+        val act = BusterRequest("PUT", ACT_PATH, headers = ifMatch, clientId = client, spanId = SPAN)
+        engine.respond(act, response, dryRun)
+    }
+
     /** The service index: JSON Home, with an ETag, and nothing a Layer 1 resource is. */
     fun indexGoesOut(client: String) {
         val headers = headers("application/json-home", "no-cache")
@@ -91,6 +109,7 @@ class World {
         /** The span of every request a scenario sends out; an event about "that response" names it. */
         const val SPAN = "00f067aa0ba902b7"
         private const val BED = """{"name":"North bed"}"""
+        private const val ACT_PATH = "/beds/1/name"
         private const val INDEX = """{"api":{"title":"Garden beds","links":{}},"resources":{}}"""
         private const val TODO = """{"id":1,"title":"Walk Buster","done":false}"""
         private const val PROBLEM = """{"status":404,"title":"Not Found"}"""

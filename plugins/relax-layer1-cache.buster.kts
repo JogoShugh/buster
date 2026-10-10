@@ -10,6 +10,11 @@
 // The act made straight after the read is not judged: that read was the fresh check, and
 // If-Match guards the act.
 //
+// An act's response is Layer 1 of the resource too, answered at the action URL (and named by
+// Content-Location). That response was got by a write, which carries no directive to judge,
+// so only later reads of the resource are judged, and the mutation is made only where the
+// client reads the resource again.
+//
 // The body is unchanged, so the engine lets this plugin keep its Cache-Control. It is
 // private, so no shared cache stores it.
 plugin("relax-layer1-cache") {
@@ -17,18 +22,25 @@ plugin("relax-layer1-cache") {
     on(Layer.RESOURCE)
 
     mutate {
+        // The resource to read again, which for an act's response is not the action URL.
+        val path = resourcePath
+        val gotByRead = request.isGet
+        if (!gotByRead) {
+            future?.let { seen ->
+                if (seen.none { it.isGet && it.path == path }) skip("the client never reads $path again in its dry run")
+            }
+        }
         val before = response.headers["Cache-Control"].orEmpty()
         response.headers["Cache-Control"] = "private, max-age=3600"
         keepCacheControl()
-        val path = request.path
         detail("Cache-Control $before became private, max-age=3600")
         fun saysNoCache(req: BusterRequest) =
             req.headers["Cache-Control"].orEmpty().split(',').any { it.trim() == "no-cache" }
 
         expect("re-read Layer 1 with Cache-Control: no-cache, whatever the response said", window = 5) {
             // The read that got this response is wire evidence too, and the client is done with
-            // it already: silence at the end is judged on it.
-            val readWithNoCache = saysNoCache(trigger)
+            // it already: silence at the end is judged on it. A write has no directive to judge.
+            val readWithNoCache = !gotByRead || saysNoCache(trigger)
             onRequest { req ->
                 when {
                     req.isGet && req.path == path && saysNoCache(req) -> pass("re-read $path with no-cache")
@@ -38,7 +50,7 @@ plugin("relax-layer1-cache") {
             }
             onExpire {
                 if (readWithNoCache) {
-                    pass("read $path with no-cache, and did not re-read it without")
+                    pass("did not re-read $path without no-cache")
                 } else {
                     fail("read $path without no-cache, and no later read said it")
                 }

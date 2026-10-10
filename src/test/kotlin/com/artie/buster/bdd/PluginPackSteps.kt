@@ -86,6 +86,15 @@ class PluginPackSteps(private val world: World) {
     fun noCacheL1GoesOut(client: String) =
         world.layerOneGoesOut("/beds/1", client, "forms=link", fixture("resource"), readWithNoCache = true)
 
+    /** The response to an act: Layer 1 of the bed, answered at the action URL, naming the bed. */
+    @Given("an L1 act response naming {string} goes out to client {string}")
+    fun actNamesBed(resource: String, client: String) =
+        world.actGoesOut(client, resource, "forms=link", fixture("resource"))
+
+    /** The same, from a server that sends no Content-Location: only the HAL self link says which bed. */
+    @Given("an L1 act response with only a self link goes out to client {string}")
+    fun actWithSelfLink(client: String) = world.actGoesOut(client, null, "forms=link", fixture("resource"))
+
     @Given("an L0 Layer 1 response goes out to client {string}")
     fun l0GoesOut(client: String) = world.layerOneGoesOut("/beds/1", client, body = fixture("resource-l0"))
 

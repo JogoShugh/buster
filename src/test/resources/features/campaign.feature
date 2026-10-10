@@ -69,10 +69,11 @@ Feature: A campaign aims every mutation where the client will exercise the rule
     And client "alice" requests PUT "/beds/1/name" with the original ETag and gets an L1 Layer 1
     And client "bob" requests GET "/beds/1" and gets an L1 Layer 1
     When the campaign is planned
-    Then the plan has 3 rounds
+    # alice's PUT answers with the bed too, but nothing reads the bed after it, so
+    # relax-layer1-cache is not made there: there is no read to judge.
+    Then the plan has 2 rounds
     And round 1 arms one combination each for "alice, bob"
     And round 2 arms one combination each for "alice"
-    And round 3 arms one combination each for "alice"
 
   Scenario: Arming a round mutates only the exchanges it names
     Given a recorded dry run of alice and bob over the plugin pack

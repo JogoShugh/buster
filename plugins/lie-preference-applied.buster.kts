@@ -15,7 +15,8 @@ plugin("lie-preference-applied") {
         // Only where the client follows the link, so there is something to refuse.
         future?.let { seen -> if (seen.none { it.isGet && it.path == href }) skip("the client never follows $href") }
         response.headers.remove("Preference-Applied")
-        val path = request.path
+        // The resource to read again, which for an act's response is not the action URL.
+        val path = resourcePath
         detail("removed Preference-Applied: $applied; the body still links $href")
 
         val span = request.spanId

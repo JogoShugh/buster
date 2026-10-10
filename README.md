@@ -195,6 +195,7 @@ Inside `mutate { ... }`:
 | - | - |
 | `request`, `response`, `classification` | The exchange. The request is read-only. |
 | `random` | The seeded random source for this exchange. Use only this, so replay works. |
+| `resourcePath` | The path of the resource this response is the state of: `Content-Location` (RFC 9110 §8.7), else the HAL self link, else the request path. An act answers at its action URL, so it is the resource, not `request.path`, that a later read is of. |
 | `future` | What this client sent after this request in the dry run (see [Campaigns](#campaigns-aiming-each-mutation)), or `null` with no dry run. Skip when the client never exercises the rule. |
 | `json()` / `writeJson(node)` | Read the body as a JSON object, write it back. |
 | `detail(text)` | What was changed, for the log. |
@@ -253,7 +254,7 @@ Which dry-run requests arm each plugin:
 
 | Plugin | Armed where the client goes on to | Silence is |
 | - | - | - |
-| `relax-layer1-cache` | (always: judged on the read that got the response) | pass if that read said `no-cache`, else FAIL |
+| `relax-layer1-cache` | (a read: always, judged on that read. An act's response: only where the client reads the resource again) | pass if the read that got the response said `no-cache` (an act is a write, so it has none to judge), else FAIL |
 | `drop-affordance` | act on an affordance of the resource: that one is dropped | pass; attested by `affordance.absent` |
 | `stale-etag` | act with `If-Match` equal to this ETag | FAIL: the act never came |
 | `alias-forms-href` | GET the forms link | FAIL: never followed it |

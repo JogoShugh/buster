@@ -13,7 +13,8 @@ plugin("stale-etag") {
         if (seen.none { it.isAct && it.ifMatch == original }) skip("the client never acts on $original in its dry run")
         val forged = "\"buster-%08x\"".format(random.nextInt())
         response.headers["ETag"] = forged
-        val path = request.path
+        // The resource the ETag belongs to, which for an act's response is not the action URL.
+        val path = resourcePath
         detail("ETag $original became $forged")
 
         var acted = false
