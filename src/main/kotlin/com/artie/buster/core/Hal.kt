@@ -6,10 +6,31 @@ import com.fasterxml.jackson.databind.node.ObjectNode
 
 /** HAL helpers shared by the engine and by plugins. */
 object Hal {
+    /** The affordance-set link relation (SPEC §6.1). */
+    const val FORMS_REL = "https://github.com/jogoshugh/heart-rise/rels/forms"
+
     val mapper = ObjectMapper()
 
     fun parseObject(bytes: ByteArray): ObjectNode? =
         runCatching { mapper.readTree(bytes) as? ObjectNode }.getOrNull()
+
+    fun links(doc: ObjectNode): ObjectNode? = doc.get("_links") as? ObjectNode
+
+    /** Expands a CURIE key like "hr:forms" through _links.curies; a full URI passes through. */
+    fun expandRel(doc: ObjectNode, key: String): String? {
+        if (key.contains("://")) return key
+        val colon = key.indexOf(':')
+        val curies = links(doc)?.get("curies")?.let { if (it.isArray) it.toList() else listOf(it) }.orEmpty()
+        val curie = curies.firstOrNull { colon > 0 && it.path("name").asText() == key.substring(0, colon) }
+        return curie?.path("href")?.asText()?.replace("{rel}", key.substring(colon + 1))
+    }
+
+    /** The _links key whose expanded relation is [rel], if any. */
+    fun linkKey(doc: ObjectNode, rel: String): String? =
+        links(doc)?.fieldNames()?.asSequence()?.firstOrNull { it != "curies" && expandRel(doc, it) == rel }
+
+    fun link(doc: ObjectNode, rel: String): ObjectNode? =
+        linkKey(doc, rel)?.let { links(doc)?.get(it) as? ObjectNode }
 
     /** _forms (HAL Schema Forms) or _templates (HAL-FORMS). */
     fun embeddedForms(doc: ObjectNode): ObjectNode? =

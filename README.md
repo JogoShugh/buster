@@ -198,8 +198,9 @@ git config core.hooksPath .githooks
 | Part | State |
 | - | - |
 | Classifier | Built |
-| Engine, `no-store` rule, seeded selection, mutation log | In progress |
-| Kotlin DSL and `*.buster.kts` script host | In progress |
-| Verifier (expectations and verdicts) | Planned |
-| First plugin pack | Planned |
+| Engine, `no-store` rule, seeded selection, mutation log | Built |
+| Kotlin DSL and `*.buster.kts` script host (compile cache, reload, error reporting) | Built |
+| Verifier (expectations and verdicts) | Built |
+| First plugin pack | 4 of 8: `strip-forms-integrity`, `drop-curie`, `stale-etag`, `relax-layer1-cache` |
+| Folder watching (reload on change) | Planned; `PluginHost.reload()` exists |
 | Spring WebFlux filter, profile switch, report endpoint | Planned |

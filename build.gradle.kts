@@ -28,6 +28,7 @@ dependencies {
     testImplementation(platform("io.cucumber:cucumber-bom:7.18.0"))
     testImplementation("io.cucumber:cucumber-java")
     testImplementation("io.cucumber:cucumber-junit-platform-engine")
+    testImplementation("io.cucumber:cucumber-picocontainer")
     testImplementation(platform("org.junit:junit-bom:5.10.3"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testImplementation("org.junit.platform:junit-platform-suite")
