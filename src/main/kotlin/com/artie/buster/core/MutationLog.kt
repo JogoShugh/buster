@@ -10,7 +10,12 @@ import java.time.Instant
 data class MutationRecord(
     val seq: Long,
     val seed: Long,
+    /** The trace id the client's requests carry, or its client header or address without one. */
     val clientId: String,
+    /** How the report names the client: its client header, or [clientId] without one. */
+    val label: String,
+    /** The span of the request whose response was mutated, if the client sent traceparent. */
+    val spanId: String?,
     val method: String,
     val path: String,
     val plugin: String,
@@ -21,14 +26,15 @@ data class MutationRecord(
 ) {
     /** The record as the log and the report write it. */
     fun fields(): Map<String, Any?> = mapOf(
-        "seq" to seq, "seed" to seed, "client" to clientId, "method" to method, "path" to path,
+        "seq" to seq, "seed" to seed, "client" to label, "trace" to clientId.takeIf { spanId != null },
+        "span" to spanId, "method" to method, "path" to path,
         "plugin" to plugin, "spec" to spec, "layer" to layer.name, "rung" to rung.name, "detail" to detail,
     )
 }
 
 /** The verdict as the log and the report write it. */
 fun Verdict.fields(): Map<String, Any?> = mapOf(
-    "seq" to record.seq, "client" to record.clientId, "plugin" to record.plugin,
+    "seq" to record.seq, "client" to record.label, "plugin" to record.plugin,
     "expectation" to expectation, "result" to outcome.label, "reason" to outcome.reason,
 )
 

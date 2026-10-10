@@ -16,13 +16,20 @@ plugin("lie-preference-applied") {
         val path = request.path
         detail("removed Preference-Applied: $applied; the body still links $href")
 
+        val span = request.spanId
+        // An act before the client has read $path again was made with no affordances to act from.
+        var reread = false
         expect("take L0 from the header, find no affordances, and fail safe", window = 5) {
             onRequest { req ->
                 when {
                     req.isGet && req.path == href -> fail("followed $href: read the rung from the body, not the header")
-                    req.isAct && req.path.startsWith(path) -> fail("acted on ${req.path} with no affordances")
+                    req.isGet && req.path == path -> pending().also { reread = true }
+                    req.isAct && !reread -> fail("acted on ${req.path} with no affordances")
                     else -> pending()
                 }
+            }
+            onEvent { ev ->
+                if (ev.name == "forms.skipped" && ev.spanId == span) attest("its log says it skipped $href at L0") else pending()
             }
             onExpire { pass("treated $path as L0 with no affordances") }
         }

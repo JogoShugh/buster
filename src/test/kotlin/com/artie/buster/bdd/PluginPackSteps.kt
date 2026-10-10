@@ -39,6 +39,11 @@ class PluginPackSteps(private val world: World) {
     @Given("an L1 Layer 1 response goes out to client {string}")
     fun l1GoesOut(client: String) = world.layerOneGoesOut("/beds/1", client, "forms=link", fixture("resource"))
 
+    /** The read that got this response carried the request directive Cache-Control: no-cache. */
+    @Given("a no-cache L1 Layer 1 response goes out to client {string}")
+    fun noCacheL1GoesOut(client: String) =
+        world.layerOneGoesOut("/beds/1", client, "forms=link", fixture("resource"), readWithNoCache = true)
+
     @Given("an L0 Layer 1 response goes out to client {string}")
     fun l0GoesOut(client: String) = world.layerOneGoesOut("/beds/1", client, body = fixture("resource-l0"))
 

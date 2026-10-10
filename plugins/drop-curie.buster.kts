@@ -15,7 +15,11 @@ plugin("drop-curie") {
         writeJson(doc)
         detail("removed _links.curies, so $key no longer expands")
 
+        val span = request.spanId
         expect("treat $key as an unknown relation", window = 5) {
+            onEvent { ev ->
+                if (ev.name == "forms.missing" && ev.spanId == span) attest("its log says it found no forms link") else pending()
+            }
             onRequest { req -> if (req.isGet && req.path == href) fail("followed $key to $href") else pending() }
             onExpire { pass("never followed $key") }
         }

@@ -21,6 +21,11 @@ class Engine(
     /** Ends the run: every open expectation gets a verdict now. */
     fun flush() = verifier.flush()
 
+    /** A line of a client's event log (see [Verifier.event]). */
+    fun event(e: ClientEvent) = verifier.event(e)
+
+    fun openFor(clientId: String): Int = verifier.openFor(clientId)
+
     fun verdicts(): List<Verdict> = verifier.verdicts()
 
     /** The mutations applied so far, oldest first; the most recent [MAX_KEPT] only. */
@@ -71,7 +76,8 @@ class Engine(
         }
         ex.res.replaceWith(work)
         val record = MutationRecord(
-            seq = ex.seq, seed = seed, clientId = ex.req.clientId, method = ex.req.method,
+            seq = ex.seq, seed = seed, clientId = ex.req.clientId, label = ex.req.label, spanId = ex.req.spanId,
+            method = ex.req.method,
             path = ex.req.path, plugin = plugin.name, spec = plugin.spec,
             layer = ex.classification.layer, rung = ex.classification.rung,
             detail = scope.details.joinToString("; "),

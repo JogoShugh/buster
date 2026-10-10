@@ -16,12 +16,22 @@ class World {
     lateinit var response: BusterResponse
 
     /** Sends a Layer 1 response for [path] through a fresh engine holding [plugins]. */
-    fun layerOneGoesOut(path: String, client: String, applied: String? = null, body: String = BED) {
+    fun layerOneGoesOut(
+        path: String,
+        client: String,
+        applied: String? = null,
+        body: String = BED,
+        readWithNoCache: Boolean = false,
+    ) {
         val headers = headers("application/hal+json", "no-cache")
         headers["ETag"] = "\"s1\""
         applied?.let { headers["Preference-Applied"] = it }
+        requestHeaders = Headers().also { if (readWithNoCache) it["Cache-Control"] = "no-cache" }
         goesOut(path, client, BusterResponse(200, headers, body.toByteArray()))
     }
+
+    /** Headers of the request whose response goes out next. */
+    private var requestHeaders = Headers()
 
     /** Sends a content-addressed Layer 2 or 3 response, served immutable. */
     fun immutableGoesOut(path: String, client: String, contentType: String, body: String) =
@@ -29,18 +39,36 @@ class World {
 
     private fun goesOut(path: String, client: String, res: BusterResponse) {
         engine = Engine(plugins, 1, log)
+        sendThrough(path, client, res)
+    }
+
+    /** Another Layer 1 response through the same engine, so earlier expectations stay open. */
+    fun anotherLayerOneGoesOut(path: String, client: String) {
+        val headers = headers("application/hal+json", "no-cache")
+        headers["ETag"] = "\"s1\""
+        sendThrough(path, client, BusterResponse(200, headers, BED.toByteArray()))
+    }
+
+    private fun sendThrough(path: String, client: String, res: BusterResponse) {
         original = res.copy()
         response = res
-        engine.respond(BusterRequest("GET", path, clientId = client), response)
+        lastPath = path
+        engine.respond(BusterRequest("GET", path, headers = requestHeaders, clientId = client, spanId = SPAN), response)
+        requestHeaders = Headers()
     }
+
+    /** The path of the last response sent out. */
+    var lastPath = ""
 
     private fun headers(contentType: String, cacheControl: String) = Headers().also {
         it["Content-Type"] = contentType
         it["Cache-Control"] = cacheControl
     }
 
-    private companion object {
-        const val BED = """{"name":"North bed"}"""
-        const val IMMUTABLE = "public, max-age=31536000, immutable"
+    companion object {
+        /** The span of every request a scenario sends out; an event about "that response" names it. */
+        const val SPAN = "00f067aa0ba902b7"
+        private const val BED = """{"name":"North bed"}"""
+        private const val IMMUTABLE = "public, max-age=31536000, immutable"
     }
 }

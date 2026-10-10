@@ -42,8 +42,10 @@ Feature: The first plugin pack attacks the client rules the spec names
       | stale-etag             | an L1 Layer 1     | gets 412, then re-syncs           | PUT /beds/1/name with the mutated ETag, GET /beds/1                            | pass         |
       | stale-etag             | an L1 Layer 1     | resubmits the stale act           | PUT /beds/1/name with the mutated ETag, PUT /beds/1/name with the mutated ETag | FAIL         |
       | stale-etag             | an L1 Layer 1     | never acts                        | nothing                                                                        | inconclusive |
-      | relax-layer1-cache     | an L1 Layer 1     | revalidates before acting         | GET /beds/1, PUT /beds/1/name                                                  | pass         |
-      | relax-layer1-cache     | an L1 Layer 1     | acts from its cached copy         | PUT /beds/1/name                                                               | FAIL         |
+      | relax-layer1-cache     | an L1 Layer 1     | re-reads it, saying no-cache      | GET /beds/1 with no-cache                                                      | pass         |
+      | relax-layer1-cache     | an L1 Layer 1     | re-reads it without no-cache      | GET /beds/1                                                                    | FAIL         |
+      | relax-layer1-cache     | an L1 Layer 1     | acts right after reading it       | PUT /beds/1/name                                                               | inconclusive |
+      | relax-layer1-cache     | a no-cache L1 Layer 1 | read it with no-cache, then reads another | GET /beds/2                                                        | pass         |
       | lie-preference-applied | an L1 Layer 1     | reads L0 and finds no affordances | GET /beds/2                                                                    | pass         |
       | lie-preference-applied | an L1 Layer 1     | follows the forms link anyway     | GET /forms/sha256-abc                                                          | FAIL         |
       | lie-preference-applied | an L1 Layer 1     | acts with no affordances          | PUT /beds/1/name                                                               | FAIL         |
@@ -56,3 +58,20 @@ Feature: The first plugin pack attacks the client rules the spec names
       | flip-byte              | an affordance set | does nothing                      | nothing                                                                        | inconclusive |
       | flip-byte              | a schema          | refetches the schema              | GET /schemas/sha256-def                                                        | pass         |
       | flip-byte              | a schema          | acts with the corrupted schema    | PUT /beds/1/name                                                               | FAIL         |
+
+  Scenario Outline: <plugin>: a client whose log says <event> gets an attested pass
+    Some right behaviour sends nothing. ARTIE's event log says what it
+    decided, tied by trace and span to the request the decision was about;
+    that can turn silence into an attested pass, never a failure into one.
+    Given only the "<plugin>" plugin from the pack
+    And <response> response goes out to client "artie"
+    When client "artie" reports "<event>" for <subject>
+    Then the verdict for "<plugin>" is attested
+
+    Examples:
+      | plugin                 | response          | event             | subject           |
+      | lie-preference-applied | an L1 Layer 1     | forms.skipped     | that response     |
+      | drop-curie             | an L1 Layer 1     | forms.missing     | that response     |
+      | flip-byte              | an affordance set | integrity.refused | that response     |
+      | flip-byte              | a schema          | integrity.refused | that response     |
+      | strip-forms-integrity  | an L1 Layer 1     | integrity.refused | the forms link    |

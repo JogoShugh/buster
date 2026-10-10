@@ -21,7 +21,11 @@ plugin("flip-byte") {
         val layer = classification.layer
         detail("byte $at of $path: '$before' became '$after'")
 
+        val span = request.spanId
         expect("refuse the corrupted $layer and never act from it", window = 5) {
+            onEvent { ev ->
+                if (ev.name == "integrity.refused" && ev.spanId == span) attest("its log says it refused $path") else pending()
+            }
             onRequest { req ->
                 when {
                     req.isGet && req.path == path -> pass("refetched $path")

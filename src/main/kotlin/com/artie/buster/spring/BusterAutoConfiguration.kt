@@ -1,6 +1,7 @@
 package com.artie.buster.spring
 
 import com.artie.buster.core.Engine
+import com.artie.buster.core.EventTail
 import com.artie.buster.core.MutationLog
 import com.artie.buster.script.PluginHost
 import org.springframework.boot.autoconfigure.AutoConfiguration
@@ -10,6 +11,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Profile
 import org.springframework.web.server.WebFilter
+import java.io.Closeable
 import java.nio.file.Path
 import java.time.Duration
 import kotlin.random.Random
@@ -31,6 +33,9 @@ class BusterProperties {
 
     /** Slow motion: how long to hold each mutated response, such as 2s. Zero holds nothing. */
     var pace: Duration = Duration.ZERO
+
+    /** A client's event log (JSON Lines) to read as it grows; unset reads none. Events can also be POSTed. */
+    var clientEvents: String? = null
 }
 
 /**
@@ -58,4 +63,13 @@ class BusterAutoConfiguration {
     @Bean
     fun busterWebFilter(engine: Engine, properties: BusterProperties) =
         BusterWebFilter(engine, properties.clientHeader, properties.pace)
+
+    /** Reads `buster.client-events` as it grows, when it is set. Closed with the context. */
+    @Bean(destroyMethod = "close")
+    fun busterEventTail(engine: Engine, properties: BusterProperties): Closeable =
+        properties.clientEvents?.let { EventTail(Path.of(it), engine::event).watch(TAIL_EVERY_MS) } ?: Closeable { }
+
+    private companion object {
+        const val TAIL_EVERY_MS = 250L
+    }
 }

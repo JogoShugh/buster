@@ -13,7 +13,16 @@ plugin("strip-forms-integrity") {
         writeJson(doc)
         detail("removed integrity from the forms link $href")
 
+        val client = request.clientId
         expect("refuse to follow a forms link without integrity", window = 5) {
+            // Refused before any request, so the event names the link by its URL, not a span.
+            onEvent { ev ->
+                if (ev.name == "integrity.refused" && ev.traceId == client && ev.path == href) {
+                    attest("its log says it refused $href")
+                } else {
+                    pending()
+                }
+            }
             onRequest { req -> if (req.isGet && req.path == href) fail("followed $href") else pending() }
             onExpire { pass("never followed $href") }
         }

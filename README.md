@@ -159,22 +159,46 @@ judges the client from its next requests:
 | - | - | - | - | - |
 | `stale-etag` | Forges the Layer 1 ETag | revalidates before acting, or gets 412 and re-syncs | resubmits the act with the stale ETag | §6.2, §6.3 |
 | `drop-affordance` | Drops one embedded affordance from an L0 manifest | never acts on it | acts on its method and target | §6.2 |
-| `flip-byte` | Changes one letter inside a JSON string in an affordance set or schema | refetches the same URL before acting | acts before refetching | §6.5 |
-| `strip-forms-integrity` | Removes `integrity` from the forms link | never follows the link | follows it | §6.5 |
-| `lie-preference-applied` | Removes `Preference-Applied` from an L1 or L2 response | treats it as L0 with no affordances | follows the forms link, or acts | §6.11.1, §6.4 |
-| `drop-curie` | Removes `_links.curies`, so `hr:forms` no longer expands | never follows `hr:forms` | follows it | §6.1, §7.5 |
+| `flip-byte` | Changes one letter inside a JSON string in an affordance set or schema | refetches the same URL before acting; attested by `integrity.refused` | acts before refetching | §6.5 |
+| `strip-forms-integrity` | Removes `integrity` from the forms link | never follows the link; attested by `integrity.refused` for it | follows it | §6.5 |
+| `lie-preference-applied` | Removes `Preference-Applied` from an L1 or L2 response | treats it as L0 with no affordances; attested by `forms.skipped` | follows the forms link, or acts before reading the resource again | §6.11.1, §6.4 |
+| `drop-curie` | Removes `_links.curies`, so `hr:forms` no longer expands | never follows `hr:forms`; attested by `forms.missing` | follows it | §6.1, §7.5 |
 | `alias-forms-href` | Adds a query the server did not write to the forms link | follows the link as given | requests the bare path, building the URL itself | §6.5 |
-| `relax-layer1-cache` | Sets Layer 1 to `private, max-age=3600` | revalidates Layer 1 before its next act | acts without revalidating | §6.3 |
+| `relax-layer1-cache` | Sets Layer 1 to `private, max-age=3600` | reads the resource again with the request directive `Cache-Control: no-cache` | reads it again without that directive | §6.3 |
 
 A window that ends with no proof either way is `inconclusive`.
+
+### The client's event log
+
+Some right behaviour sends nothing: a link not followed, tampered bytes
+refused. A client can say what it decided in an event log: one JSON line per
+decision, in OpenTelemetry log data model fields (`trace_id`, `span_id`,
+`event_name`, `attributes`). ARTIE writes one when `ARTIE_EVENTS` (a file) or
+`ARTIE_EVENTS_URL` (a URL) is set. Buster reads it two ways: it follows the
+file named by `buster.client-events`, and it accepts lines POSTed to
+`/_buster/events`.
+
+Each event names the client by trace id and the request it is about by span
+id, from the W3C `traceparent` the client sent. An event can only attest a
+pass, shown as `pass (attested)`, which the report keeps apart from a pass
+seen on the wire. A failure comes only from the wire, and nothing a client
+says can clear one. `client.done` closes that client's open windows with
+their expiry outcome, so a client that stops at the end of a scenario no
+longer leaves them `inconclusive`. The exception: a window that saw no
+request at all since its mutation closes as `inconclusive`. Nothing on the
+wire showed the client right, and "done" alone never makes a plain pass.
 
 Some judgements are approximations, and the scripts say so:
 
 - "Never cache it" cannot be seen from requests. `flip-byte` judges the
   observable part: the client fetched those bytes because it needed them, so
   acting before it refetches means it used the corrupted copy.
-- `relax-layer1-cache` and `lie-preference-applied` count an act as "on this
-  resource" when its path starts with the resource's path.
+- `relax-layer1-cache` does not judge the act made straight after the read:
+  that read was the fresh check, and `If-Match` guards the act. A later read
+  that the client's own cache answers never reaches Buster, so it stays
+  `inconclusive`.
+- No plugin reads meaning from a URL. A request is tied to a resource only by
+  equal paths, and an event to a request only by trace and span.
 - `alias-forms-href` relies on the server ignoring query parameters it does
   not know, so the aliased URL serves the same bytes.
 
@@ -219,13 +243,16 @@ the `buster` profile turns it on.
 | `buster.plugins` | The folder of `*.buster.kts` scripts | `plugins` (`../buster/plugins` in server-spring) |
 | `buster.seed` | The run's seed. Unset means a random one, logged for replay. | random |
 | `buster.log` | A file for the JSON Lines log | in memory only |
-| `buster.client-header` | The header that names the client, so expectations are judged per client | `User-Agent` |
+| `buster.client-header` | The header that labels the client, and names it when it sends no `traceparent` | `User-Agent` |
+| `buster.client-events` | A client event log (JSON Lines) to follow as it grows | none |
 | `buster.pace` | Slow motion: how long to hold each mutated response, such as `2s`. Responses Buster leaves alone are never held. | `0s` |
 
 Buster judges each mutation from the same client's next requests, so it must
-tell clients apart. It does that by `User-Agent`, which exists to name the
-client software. Give each client its own, such as
-`ARTIE/0.5 (two-clients; second)`. Without one, Buster falls back to the
+tell clients apart. It does that by the trace id of the W3C `traceparent`
+header, which exists to group one client's requests, and labels the client by
+`User-Agent` in the report. A client that sends no `traceparent` is told apart
+by `User-Agent`, so give each its own, such as
+`ARTIE/0.5 (two-clients; second)`; without either, Buster falls back to the
 remote address, and every client on one machine counts as one.
 
 ### Watching a run

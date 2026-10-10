@@ -2,6 +2,7 @@ package com.artie.buster.spring
 
 import com.artie.buster.core.BusterRequest
 import com.artie.buster.core.BusterResponse
+import com.artie.buster.core.ClientEvent
 import com.artie.buster.core.Engine
 import com.artie.buster.core.Hal
 import com.artie.buster.core.Headers
@@ -10,6 +11,7 @@ import org.reactivestreams.Publisher
 import org.springframework.core.Ordered
 import org.springframework.core.io.buffer.DataBuffer
 import org.springframework.core.io.buffer.DataBufferUtils
+import org.springframework.http.HttpMethod
 import org.springframework.http.HttpStatusCode
 import org.springframework.http.MediaType
 import org.springframework.http.server.reactive.ServerHttpRequest
@@ -43,6 +45,7 @@ class BusterWebFilter(
         when (exchange.request.path.value()) {
             REPORT_PATH -> report(exchange)
             VIEW_PATH -> write(exchange, HTML, LiveView.PAGE.toByteArray())
+            EVENTS_PATH -> events(exchange)
             else -> {
                 val req = toBuster(exchange.request)
                 engine.request(req)
@@ -74,28 +77,55 @@ class BusterWebFilter(
             return Result(res.body, record != null)
         }
 
-        private fun bytesOf(buffer: DataBuffer): ByteArray {
-            val bytes = ByteArray(buffer.readableByteCount())
-            buffer.read(bytes)
-            DataBufferUtils.release(buffer)
-            return bytes
-        }
-
         override fun writeAndFlushWith(body: Publisher<out Publisher<out DataBuffer>>): Mono<Void> =
             writeWith(Flux.from(body).concatMap { it })
     }
 
     private class Result(val body: ByteArray, val mutated: Boolean)
 
-    private fun toBuster(request: ServerHttpRequest) = BusterRequest(
-        method = request.method.name(),
-        path = request.path.value(),
-        query = request.uri.rawQuery,
-        headers = Headers(request.headers),
-        clientId = request.headers.getFirst(clientHeader)
-            ?: request.remoteAddress?.address?.hostAddress
-            ?: "anonymous",
-    )
+    /**
+     * A client is its W3C trace id when it sends traceparent (version-traceid-spanid-flags),
+     * else its client header, else its address. The client header still labels it.
+     */
+    private fun toBuster(request: ServerHttpRequest): BusterRequest {
+        val trace = request.headers.getFirst(TRACEPARENT)?.split('-')?.takeIf { it.size == TRACEPARENT_PARTS }
+        val named = request.headers.getFirst(clientHeader)
+        val clientId = trace?.get(1) ?: named ?: request.remoteAddress?.address?.hostAddress ?: "anonymous"
+        return BusterRequest(
+            method = request.method.name(),
+            path = request.path.value(),
+            query = request.uri.rawQuery,
+            headers = Headers(request.headers),
+            clientId = clientId,
+            spanId = trace?.get(2),
+            label = named ?: clientId,
+        )
+    }
+
+    /** POST /_buster/events: one or more client event lines (JSON Lines), handed to the verifier. */
+    private fun events(exchange: ServerWebExchange): Mono<Void> {
+        if (exchange.request.method != HttpMethod.POST) {
+            exchange.response.statusCode = HttpStatusCode.valueOf(METHOD_NOT_ALLOWED)
+            exchange.response.headers.allow = setOf(HttpMethod.POST)
+            return exchange.response.setComplete()
+        }
+        return DataBufferUtils.join(exchange.request.body)
+            .map { String(bytesOf(it), Charsets.UTF_8) }
+            .defaultIfEmpty("")
+            .flatMap { text ->
+                text.lineSequence().filter { it.isNotBlank() }.mapNotNull(ClientEvent::parse).forEach(engine::event)
+                exchange.response.statusCode = HttpStatusCode.valueOf(NO_CONTENT)
+                exchange.response.setComplete()
+            }
+    }
+
+    /** Reads a joined buffer whole and releases it. */
+    private fun bytesOf(buffer: DataBuffer): ByteArray {
+        val bytes = ByteArray(buffer.readableByteCount())
+        buffer.read(bytes)
+        DataBufferUtils.release(buffer)
+        return bytes
+    }
 
     /** JSON for people and tools; HTML rows when htmx asks, for the live view. */
     private fun report(exchange: ServerWebExchange): Mono<Void> {
@@ -125,6 +155,11 @@ class BusterWebFilter(
     companion object {
         const val REPORT_PATH = "/_buster/report"
         const val VIEW_PATH = "/_buster"
+        const val EVENTS_PATH = "/_buster/events"
+        private const val TRACEPARENT = "traceparent"
+        private const val TRACEPARENT_PARTS = 4
+        private const val NO_CONTENT = 204
+        private const val METHOD_NOT_ALLOWED = 405
         /** User-Agent names the client software, so each client should send its own. */
         const val DEFAULT_CLIENT_HEADER = "User-Agent"
         private val HTML = MediaType(MediaType.TEXT_HTML, Charsets.UTF_8)

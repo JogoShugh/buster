@@ -13,17 +13,25 @@ sealed class Outcome(
 
     /** The client never did anything that could prove it right or wrong. */
     data class Inconclusive(override val reason: String) : Outcome("inconclusive")
+
+    /**
+     * The wire showed nothing wrong, and the client's own event log said it did the right
+     * thing. Weaker than [Pass], so the report keeps them apart.
+     */
+    data class Attested(override val reason: String) : Outcome("pass (attested)")
 }
 
 /**
  * What the client must do after a mutation, judged from the requests it sends next.
  * [step] sees each later request from the same client; [expire] runs when [window] requests pass.
+ * [event] sees each line of the same client's event log, and can only attest a pass.
  */
 class Expectation(
     val description: String,
     val window: Int,
     val step: (BusterRequest) -> Outcome,
     val expire: () -> Outcome,
+    val event: (ClientEvent) -> Outcome = { Outcome.Pending },
 )
 
 /** Builds an [Expectation] inside a plugin's mutate block. */
@@ -31,10 +39,18 @@ class Expectation(
 class ExpectationBuilder(private val description: String, private val window: Int) {
     private var step: (BusterRequest) -> Outcome = { Outcome.Pending }
     private var expire: () -> Outcome = { Outcome.Inconclusive("window ended with no answer") }
+    private var event: (ClientEvent) -> Outcome = { Outcome.Pending }
 
     fun onRequest(block: (BusterRequest) -> Outcome) {
         step = block
     }
+
+    /** Judges a line of the client's event log. Only [attest] or [pending] count; nothing else is taken from it. */
+    fun onEvent(block: (ClientEvent) -> Outcome) {
+        event = block
+    }
+
+    fun attest(reason: String): Outcome = Outcome.Attested(reason)
 
     fun onExpire(block: () -> Outcome) {
         expire = block
@@ -50,7 +66,7 @@ class ExpectationBuilder(private val description: String, private val window: In
 
     internal fun build(): Expectation {
         require(window >= 1) { "expectation '$description': window must be at least 1" }
-        return Expectation(description, window, step, expire)
+        return Expectation(description, window, step, expire, event)
     }
 }
 
@@ -86,17 +102,46 @@ class Verifier(private val log: MutationLog) {
         }
     }
 
+    /**
+     * A line of a client's event log. `client.done` ends that client's open windows as
+     * [flush] ends every window. Any other event can only attest a pass: a failure, or a
+     * plain pass, is never taken from what a client says.
+     */
+    @Synchronized
+    fun event(e: ClientEvent) {
+        val list = open[e.traceId] ?: return
+        if (e.name == ClientEvent.DONE) {
+            list.forEach(::end)
+            open.remove(e.traceId)
+            return
+        }
+        val iterator = list.iterator()
+        while (iterator.hasNext()) {
+            val o = iterator.next()
+            val outcome = o.exp.event(e)
+            if (outcome is Outcome.Attested) {
+                close(o, outcome)
+                iterator.remove()
+            }
+        }
+    }
+
+    /** How many expectations are still open for [clientId]. */
+    @Synchronized
+    fun openFor(clientId: String): Int = open[clientId]?.size ?: 0
+
     /** Ends every open window now, at shutdown or when a run finishes. */
     @Synchronized
     fun flush() {
-        open.values.forEach { list ->
-            list.forEach {
-                val outcome = if (it.seen == 0) Outcome.Inconclusive(NO_REQUEST) else it.exp.expire()
-                close(it, outcome)
-            }
-        }
+        open.values.forEach { list -> list.forEach(::end) }
         open.clear()
     }
+
+    /**
+     * Ends a window before it ran out. With no request on the wire since the mutation,
+     * nothing showed the client right or wrong, whatever the expiry outcome would say.
+     */
+    private fun end(o: Open) = close(o, if (o.seen == 0) Outcome.Inconclusive(NO_REQUEST) else o.exp.expire())
 
     private fun close(o: Open, outcome: Outcome) {
         val verdict = Verdict(o.record, o.exp.description, outcome)

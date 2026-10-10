@@ -84,6 +84,56 @@ class SpringFilterSteps {
         },
     )
 
+    @Given("Buster runs with a plugin that expects no GET of {string}, attested by {string}")
+    fun expectingAttested(path: String, event: String) = start(
+        buster {
+            plugin("forbid") {
+                on(Layer.RESOURCE)
+                mutate {
+                    val span = request.spanId
+                    expect("never GET $path", window = 3) {
+                        onRequest { req -> if (req.path == path) fail("got $path") else pending() }
+                        onEvent { ev ->
+                            if (ev.name == event && ev.spanId == span) attest("said $event") else pending()
+                        }
+                        onExpire { pass("never got $path") }
+                    }
+                }
+            }
+        },
+    )
+
+    /** The trace and span of the last traced request, for an event about it. */
+    private var lastTrace = ""
+    private var lastSpan = ""
+
+    @When("the client with User-Agent {string} and trace {string} GETs {string}")
+    fun getTraced(agent: String, trace: String, path: String) {
+        lastTrace = trace
+        lastSpan = SPAN
+        fetch(null, path, mapOf("User-Agent" to agent, "traceparent" to "00-$trace-$SPAN-01"))
+    }
+
+    @When("the client POSTs a {string} event for that request to {string}")
+    fun postEvent(event: String, path: String) {
+        val line = """{"trace_id":"$lastTrace","span_id":"$lastSpan","event_name":"$event","attributes":{}}"""
+        result = client.post().uri(path).contentType(MediaType.APPLICATION_JSON).bodyValue(line)
+            .exchange().expectBody(ByteArray::class.java).returnResult()
+    }
+
+    @Then("the report lists mutation {long} for trace {string} labelled {string}")
+    fun reportTrace(seq: Long, trace: String, label: String) {
+        val mutations = checkNotNull(Hal.parseObject(body())).path("mutations").toList()
+        assertTrue(
+            mutations.any {
+                it["seq"].asLong() == seq && it["trace"].asText() == trace && it["client"].asText() == label
+            },
+        ) { "mutations: $mutations" }
+    }
+
+    @Then("the report shows a {string} verdict for client {string}")
+    fun reportQuotedVerdict(verdict: String, clientId: String) = reportVerdict(verdict, clientId)
+
     @When("a client GETs {string}")
     fun get(path: String) = fetch(null, path)
 
@@ -185,6 +235,9 @@ class SpringFilterSteps {
         assertTrue(type.isCompatibleWith(MediaType.TEXT_HTML) && type.charset == Charsets.UTF_8) { "type: $type" }
     }
 
+    @Then("the response status is {int}")
+    fun status(code: Int) = assertEquals(code, result.status.value())
+
     @Then("the report shows no FAIL verdict")
     fun noFail() {
         val verdicts = checkNotNull(Hal.parseObject(body())).path("verdicts").toList()
@@ -260,6 +313,7 @@ class SpringFilterSteps {
 
     private companion object {
         val HAL: MediaType = MediaType.parseMediaType("application/hal+json")
+        const val SPAN = "00f067aa0ba902b7"
         const val NANOS_PER_MILLI = 1_000_000L
     }
 }

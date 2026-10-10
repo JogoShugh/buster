@@ -50,13 +50,20 @@ class Headers(initial: Map<String, List<String>> = emptyMap()) {
     }
 }
 
-/** An inbound request as Buster sees it. Read-only to plugins. */
+/**
+ * An inbound request as Buster sees it. Read-only to plugins. [clientId] groups a
+ * client's requests: the trace id of its W3C traceparent when it sends one, else the
+ * client header, else its address. [spanId] names this one request, so a client's
+ * event about it can be tied to it. [label] is how the report names the client.
+ */
 data class BusterRequest(
     val method: String,
     val path: String,
     val query: String? = null,
     val headers: Headers = Headers(),
     val clientId: String = "anonymous",
+    val spanId: String? = null,
+    val label: String = clientId,
 ) {
     val isAct get() = method.uppercase() !in setOf("GET", "HEAD", "OPTIONS")
     val isGet get() = method.equals("GET", ignoreCase = true)
