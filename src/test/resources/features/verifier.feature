@@ -30,9 +30,26 @@ Feature: Each mutation says what the client must do, judged from its next reques
     Then the verdict for "strip-integrity" is <result> with reason "<reason>"
 
     Examples:
-      | requests     | result       | reason                                       |
-      | nothing      | inconclusive | client sent no request before the run ended |
-      | GET /beds/1  | pass         | never followed it                            |
+      | requests     | result | reason            |
+      | nothing      | pass   | never followed it |
+      | GET /beds/1  | pass   | never followed it |
+
+  # What silence means is the plugin's to say. Buster never decides it for the plugin.
+  Scenario Outline: Silence is judged by the expectation's own rule, never by a shortcut
+    Given a plugin "needs-the-act" that expects "make the act" within 3 requests:
+      | on a GET of | /forms/abc |
+      | it fails    | followed it |
+      | at expiry   | never acted |
+      | expiry is   | <rule>      |
+    And a Layer 1 response for "/beds/1" goes out to client "artie"
+    When client "artie" sends nothing
+    And the run ends
+    Then the verdict for "needs-the-act" is <result> with reason "never acted"
+
+    Examples:
+      | rule | result |
+      | pass | pass   |
+      | FAIL | FAIL   |
 
   Scenario: A verdict is logged with the mutation it judges
     When client "artie" sends GET /forms/abc

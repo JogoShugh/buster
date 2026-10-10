@@ -31,7 +31,7 @@ Feature: Buster runs as the first WebFilter in a Spring WebFlux server
     Given Buster runs with a plugin that expects no GET of "/forbidden"
     When client "artie" GETs "/beds/1"
     And a client GETs "/_buster/report?flush=true"
-    Then the report shows an inconclusive verdict for client "artie"
+    Then the report shows a pass verdict for client "artie"
 
   Scenario: The report lists each mutation as it happens
     Given Buster runs with a plugin that renames every bed to "Chewed"
@@ -68,7 +68,7 @@ Feature: Buster runs as the first WebFilter in a Spring WebFlux server
     When the client with User-Agent "ARTIE/0.5 (one)" GETs "/beds/1"
     And the client with User-Agent "ARTIE/0.5 (two)" GETs "/forbidden"
     And a client GETs "/_buster/report?flush=true"
-    Then the report shows an inconclusive verdict for client "ARTIE/0.5 (one)"
+    Then the report shows a pass verdict for client "ARTIE/0.5 (one)"
     And the report shows no FAIL verdict
 
   Scenario: The report escapes what it shows

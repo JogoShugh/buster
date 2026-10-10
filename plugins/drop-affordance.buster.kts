@@ -24,6 +24,16 @@ plugin("drop-affordance") {
         detail("dropped affordance $name ($method $target)")
 
         expect("never act on the dropped affordance $name", window = 5) {
+            // After a 412 a client re-reads the resource, finds the affordance gone and drops its
+            // act. Its log says so against the re-read's span, not this response's, so the event
+            // is matched by client and relation.
+            onEvent { ev ->
+                if (ev.name == "affordance.absent" && ev.attributes["heart.rel"] == name) {
+                    attest("its log says it found $name gone")
+                } else {
+                    pending()
+                }
+            }
             onRequest { req -> if (Forms.actsOn(req, dropped)) fail("acted on $name: $method ${req.path}") else pending() }
             onExpire { pass("never acted on $name") }
         }

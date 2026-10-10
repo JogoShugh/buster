@@ -44,8 +44,10 @@ Feature: The first plugin pack attacks the client rules the spec names
       | stale-etag             | an L1 Layer 1     | never acts                        | nothing                                                                        | inconclusive |
       | relax-layer1-cache     | an L1 Layer 1     | re-reads it, saying no-cache      | GET /beds/1 with no-cache                                                      | pass         |
       | relax-layer1-cache     | an L1 Layer 1     | re-reads it without no-cache      | GET /beds/1                                                                    | FAIL         |
-      | relax-layer1-cache     | an L1 Layer 1     | acts right after reading it       | PUT /beds/1/name                                                               | inconclusive |
+      | relax-layer1-cache     | an L1 Layer 1     | acts right after reading it       | PUT /beds/1/name                                                               | FAIL         |
       | relax-layer1-cache     | a no-cache L1 Layer 1 | read it with no-cache, then reads another | GET /beds/2                                                        | pass         |
+      | relax-layer1-cache     | a no-cache L1 Layer 1 | read it with no-cache, then stops | nothing                                                                    | pass         |
+      | relax-layer1-cache     | an L1 Layer 1     | read it without no-cache, then stops | nothing                                                                     | FAIL         |
       | lie-preference-applied | an L1 Layer 1     | reads L0 and finds no affordances | GET /beds/2                                                                    | pass         |
       | lie-preference-applied | an L1 Layer 1     | follows the forms link anyway     | GET /forms/sha256-abc                                                          | FAIL         |
       | lie-preference-applied | an L1 Layer 1     | acts with no affordances          | PUT /beds/1/name                                                               | FAIL         |
@@ -75,3 +77,18 @@ Feature: The first plugin pack attacks the client rules the spec names
       | flip-byte              | an affordance set | integrity.refused | that response     |
       | flip-byte              | a schema          | integrity.refused | that response     |
       | strip-forms-integrity  | an L1 Layer 1     | integrity.refused | the forms link    |
+
+  Scenario: drop-affordance: a client whose log says it found the dropped affordance gone gets an attested pass
+    After a 412 a client re-reads the resource, finds the affordance gone and drops
+    its act. The event names the relation and the span of the re-read, not of the
+    response that was mutated.
+    Given only the "drop-affordance" plugin from the pack
+    And an L0 Layer 1 response goes out to client "artie"
+    When client "artie" finds the dropped affordance "rename" gone on a re-read, and reports "affordance.absent"
+    Then the verdict for "drop-affordance" is attested
+
+  Scenario: drop-affordance: an event about another relation changes nothing
+    Given only the "drop-affordance" plugin from the pack
+    And an L0 Layer 1 response goes out to client "artie"
+    When client "artie" finds the dropped affordance "harvest" gone on a re-read, and reports "affordance.absent"
+    Then "drop-affordance" has no verdict yet

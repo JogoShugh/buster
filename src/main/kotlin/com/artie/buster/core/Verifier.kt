@@ -36,7 +36,15 @@ class Expectation(
 
 /** Builds an [Expectation] inside a plugin's mutate block. */
 @BusterDslMarker
-class ExpectationBuilder(private val description: String, private val window: Int) {
+class ExpectationBuilder(
+    private val description: String,
+    private val window: Int,
+    /**
+     * The request whose response was mutated. A plugin can judge the read that got the mutation
+     * with this; the surrounding mutate block's own `request` is out of reach inside expect.
+     */
+    val trigger: BusterRequest,
+) {
     private var step: (BusterRequest) -> Outcome = { Outcome.Pending }
     private var expire: () -> Outcome = { Outcome.Inconclusive("window ended with no answer") }
     private var event: (ClientEvent) -> Outcome = { Outcome.Pending }
@@ -138,10 +146,10 @@ class Verifier(private val log: MutationLog) {
     }
 
     /**
-     * Ends a window before it ran out. With no request on the wire since the mutation,
-     * nothing showed the client right or wrong, whatever the expiry outcome would say.
+     * Ends a window before it ran out. What silence means is the expectation's own rule:
+     * a client that never sent another request is judged by [Expectation.expire], like any other.
      */
-    private fun end(o: Open) = close(o, if (o.seen == 0) Outcome.Inconclusive(NO_REQUEST) else o.exp.expire())
+    private fun end(o: Open) = close(o, o.exp.expire())
 
     private fun close(o: Open, outcome: Outcome) {
         val verdict = Verdict(o.record, o.exp.description, outcome)
@@ -151,8 +159,4 @@ class Verifier(private val log: MutationLog) {
 
     @Synchronized
     fun verdicts(): List<Verdict> = verdicts.toList()
-
-    private companion object {
-        const val NO_REQUEST = "client sent no request before the run ended"
-    }
 }

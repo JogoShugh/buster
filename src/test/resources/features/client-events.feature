@@ -36,11 +36,11 @@ Feature: A client's event log can attest what the wire cannot show
     Then the verdict for "strip-integrity" is pass with reason "never followed it"
     And client "trace-b" still has an open expectation
 
-  # "Done" is the client's word. Without a request on the wire after the mutation,
-  # nothing showed the client right, so its word alone cannot make a plain pass.
-  Scenario: A client that is done before any further request gets no pass from saying so
+  # "Done" closes the window. What silence means is the expectation's own rule, so a
+  # client that stops before any further request is judged by it, not by a shortcut.
+  Scenario: A client that is done before any further request is judged by its silence rule
     When client "trace-a" reports "client.done" for nothing
-    Then the verdict for "strip-integrity" is inconclusive with reason "client sent no request before the run ended"
+    Then the verdict for "strip-integrity" is pass with reason "never followed it"
 
   Scenario: A line that arrives in two pieces, split inside a character, is read whole
     When the client event file gets the first half of a "forms.skipped" line noting "🐕 chewed"

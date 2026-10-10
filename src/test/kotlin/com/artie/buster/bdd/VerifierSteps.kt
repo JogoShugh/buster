@@ -25,6 +25,7 @@ class VerifierSteps(private val world: World) {
         val failure = rules.getValue("it fails")
         val expiry = rules.getValue("at expiry")
         val attestedBy = rules["attested by"]
+        val silenceFails = rules["expiry is"] == "FAIL"
         world.plugins = buster {
             plugin(name) {
                 on(Layer.RESOURCE)
@@ -35,7 +36,7 @@ class VerifierSteps(private val world: World) {
                         onEvent { ev ->
                             if (ev.name == attestedBy && ev.spanId == span) attest("said ${ev.name}") else pending()
                         }
-                        onExpire { pass(expiry) }
+                        onExpire { if (silenceFails) fail(expiry) else pass(expiry) }
                     }
                 }
             }
@@ -139,6 +140,11 @@ class VerifierSteps(private val world: World) {
      * Requests are "METHOD /path", comma-separated. "with the mutated ETag" adds If-Match;
      * "GET the forms link" follows the forms link in the response as it went out.
      */
+    @When("client {string} finds the dropped affordance {string} gone on a re-read, and reports {string}")
+    fun reportsAbsent(client: String, rel: String, event: String) = world.engine.event(
+        ClientEvent(client, REREAD_SPAN, event, mapOf("heart.rel" to rel)),
+    )
+
     @When("client {string} sends {}")
     fun sends(client: String, requests: String) {
         if (requests == "nothing") return
@@ -153,6 +159,11 @@ class VerifierSteps(private val world: World) {
             )
             world.engine.request(req)
         }
+    }
+
+    private companion object {
+        /** The span of a later request: not the one whose response was mutated. */
+        const val REREAD_SPAN = "2222222222222222"
     }
 
     private fun formsHref(): String {
