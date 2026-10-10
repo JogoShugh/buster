@@ -253,6 +253,11 @@ should have happened. A campaign aims each mutation from a dry run:
    the position, the plugin, the planned path and the live path (or "no
    request"), and is never silent.
 
+A partial run (`BUSTER_ROUNDS=1-3`) is not a failed one: a plugin whose
+combinations are all in rounds that have not run is listed under `unrun`, not
+`holes`, and the report says `complete: false`. `ok` then speaks only for the
+rounds that ran.
+
 Two things keep a run honest about what it judges:
 
 - **Clients that interact are not armed together.** Clients that overlap in
@@ -262,9 +267,9 @@ Two things keep a run honest about what it judges:
   from the dry run, not from anything in a client's name.
 - **A fresh representation replaces the mutated one.** Buster sends `no-store`
   with a mutation, so the client keeps nothing of it. When the client enters the
-  resource again and is answered a whole, unmutated representation, the window on
-  the mutated one closes (`onSuperseded`): what the client does with the fresh
-  one is its own business.
+  resource again and is answered a whole, unmutated representation, or a `304`
+  that says the copy it holds is current, the window on the mutated one closes
+  (`onSuperseded`): what the client does with that is its own business.
 
 `POST /_buster/campaign/off` returns to mutating by seed. With a plan in hand,
 the seed samples from the plan's combinations rather than from every response.

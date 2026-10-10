@@ -210,6 +210,26 @@ Feature: A campaign aims every mutation where the client will exercise the rule
     Then the campaign has a coverage hole for "relax-layer1-cache"
     And the campaign is not ok
 
+  # Running rounds 1 to 3 says nothing about a plugin whose combinations are in round 9.
+  # That is not a hole in the scenarios, it is a plugin not yet run, and the report says so.
+  Scenario: A partial run does not call a plugin it has not run a hole
+    Given a campaign over the plugin pack
+    And the campaign starts recording
+    And client "alice" requests GET "/beds/1" and gets an L1 Layer 1
+    And client "alice" requests PUT "/beds/1/name" with the original ETag and gets an L1 Layer 1
+    And the campaign is planned
+    And round 1 is armed
+    When client "alice" requests GET "/beds/1" and gets an L1 Layer 1
+    And the run ends
+    Then the campaign has not yet run "stale-etag"
+    And the campaign has no coverage hole for "stale-etag"
+    And the campaign is not complete
+
+  Scenario: The mutations are kept for a whole campaign, not only the last thousand
+    Given a campaign over the plugins "relax-layer1-cache"
+    When client "alice" is answered 1500 more mutated representations
+    Then the engine has kept all 1500 mutations
+
   Scenario: A campaign is ok only with no FAIL and no hole
     Given a campaign over the plugins "relax-layer1-cache"
     And the campaign starts recording

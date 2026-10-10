@@ -38,7 +38,7 @@ class Engine(
 
     fun verdicts(): List<Verdict> = verifier.verdicts()
 
-    /** The mutations applied so far, oldest first; the most recent [MAX_KEPT] only. */
+    /** The mutations applied so far, oldest first; the most recent [MAX_KEPT] only, enough for a campaign. */
     fun mutations(): List<MutationRecord> = synchronized(applied) { applied.toList() }
 
     private val applied = ArrayDeque<MutationRecord>()
@@ -59,8 +59,10 @@ class Engine(
         } else {
             bySeed(req, res, classification, future)
         }
-        // A whole, unmutated representation replaces whatever the client was given before.
-        if (record == null && req.isGet && res.status in SUCCESS) {
+        // A whole, unmutated representation replaces whatever the client was given before; so does
+        // a 304, which tells the client the copy it holds is current. Buster did not mutate that.
+        val answered = res.status in SUCCESS || res.status == NOT_MODIFIED
+        if (record == null && req.isGet && answered) {
             verifier.superseded(req.clientId, Resource.pathOf(req, res))
         }
         return record
@@ -138,8 +140,9 @@ class Engine(
     }
 
     private companion object {
-        const val MAX_KEPT = 1_000
+        const val MAX_KEPT = 100_000
         val SUCCESS = 200..299
+        const val NOT_MODIFIED = 304
     }
 }
 
@@ -151,16 +154,27 @@ fun Engine.campaignReport(): CampaignReport {
         byPlugin.groupBy { it.record.label }.mapValues { (_, byLabel) -> byLabel.map { it.outcome.label } }
     }
     val failures = verdicts.count { it.outcome is Outcome.Fail }
-    // Coverage is what was made, once a round has run; before that, what the plan allows.
     val planned = plan?.coverage.orEmpty()
     val made = planned.keys.associateWith { campaign.ledger.madeCounts()[it] ?: 0 }
-    val coverage = if (campaign.ledger.roundsRun() > 0) made else planned
-    val holes = coverage.filterValues { it == 0 }.keys.sorted()
+    val ran = campaign.ledger.roundsRun()
+    // The rounds each plugin is planned in: a plugin not yet run is not one that ran and made nothing.
+    val plannedIn = planned.keys.associateWith { name ->
+        plan?.rounds.orEmpty().withIndex().filter { (_, r) -> r.any { it.plugin == name } }.map { it.index + 1 }
+    }
+    val holes = planned.keys.filter { name ->
+        val rounds = plannedIn.getValue(name)
+        rounds.isEmpty() || (rounds.any { it in ran } && made.getValue(name) == 0)
+    }.sorted()
+    val unrun = planned.keys.filter { name ->
+        val rounds = plannedIn.getValue(name)
+        ran.isNotEmpty() && rounds.isNotEmpty() && rounds.none { it in ran }
+    }.sorted()
     val misaligned = campaign.ledger.misaligned()
     return CampaignReport(
-        mode = campaign.mode, round = campaign.round, planned = planned, made = made, coverage = coverage,
-        holes = holes, misaligned = misaligned, matrix = matrix, failures = failures,
-        ok = plan != null && failures == 0 && holes.isEmpty() && misaligned.isEmpty(),
+        mode = campaign.mode, round = campaign.round, planned = planned, made = made,
+        coverage = if (ran.isNotEmpty()) made else planned, holes = holes, unrun = unrun,
+        complete = plan != null && ran.size == plan.rounds.size, misaligned = misaligned, matrix = matrix,
+        failures = failures, ok = plan != null && failures == 0 && holes.isEmpty() && misaligned.isEmpty(),
     )
 }
 
@@ -176,6 +190,10 @@ data class CampaignReport(
     val coverage: Map<String, Int>,
     /** Plugins with none: each is a hole, and needs a live scenario that exercises it. */
     val holes: List<String>,
+    /** Plugins planned only in rounds that have not run: not holes, just not yet run. */
+    val unrun: List<String>,
+    /** Every round of the plan has run. Without it, `ok` says nothing about the rounds left. */
+    val complete: Boolean,
     /** Combinations a round armed and did not make. Any is a failure: the round proved nothing. */
     val misaligned: List<Misaligned>,
     /** plugin, then client, then every verdict that pair got. */

@@ -35,16 +35,16 @@ class Ledger {
     private val misses = mutableListOf<Misaligned>()
     private var armed = emptyMap<Pair<String, Int>, Combination>()
     private var open = false
-    private var rounds = 0
+    private val ran = sortedSetOf<Int>()
 
-    /** A round is armed with these combinations. */
+    /** Round [number] is armed with these combinations. */
     @Synchronized
-    fun begin(round: Map<Pair<String, Int>, Combination>) {
+    fun begin(number: Int, round: Map<Pair<String, Int>, Combination>) {
         reached.clear()
         made.clear()
         armed = round
         open = true
-        rounds++
+        ran += number
     }
 
     @Synchronized
@@ -75,7 +75,7 @@ class Ledger {
         madeByPlugin.clear()
         misses.clear()
         open = false
-        rounds = 0
+        ran.clear()
     }
 
     /** What the rounds settled so far armed and did not make. */
@@ -86,8 +86,9 @@ class Ledger {
     @Synchronized
     fun madeCounts(): Map<String, Int> = madeByPlugin.toMap()
 
+    /** The rounds armed so far, by number. */
     @Synchronized
-    fun roundsRun(): Int = rounds
+    fun roundsRun(): Set<Int> = ran.toSet()
 }
 
 /**
@@ -239,7 +240,7 @@ class Campaign(
         verifier.flush()
         verifier.windowless = true
         armed = chosen.associateBy { it.label to it.index }
-        ledger.begin(armed)
+        ledger.begin(number, armed)
         live.clear()
         liveTicks.clear()
         round = number

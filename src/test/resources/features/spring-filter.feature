@@ -140,6 +140,16 @@ Feature: Buster runs as the first WebFilter in a Spring WebFlux server
     Then the report's campaign has a coverage hole for "stale-etag"
     And the report's campaign is not ok
 
+  # A client that revalidates and is told nothing changed (304, no body) goes on with a
+  # representation it already held, which Buster did not mutate. That replaces the mutated
+  # one just as a whole response does, though no body ever reaches the engine.
+  Scenario: A 304 to a conditional GET replaces the mutated representation too
+    Given Buster runs with a plugin that passes once the client is told nothing changed
+    When client "artie" GETs "/beds/1"
+    And client "artie" GETs "/beds/1" conditionally
+    And a client GETs "/_buster/report"
+    Then the report shows a pass verdict for client "artie"
+
   Scenario: The report names what an armed round did not make
     Given Buster runs with the plugin pack
     When a client POSTs "/_buster/campaign/record"

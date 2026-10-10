@@ -30,6 +30,7 @@ import org.springframework.test.web.reactive.server.EntityExchangeResult
 import org.springframework.test.web.reactive.server.WebTestClient
 import org.springframework.web.reactive.function.server.RouterFunction
 import org.springframework.web.reactive.function.server.RouterFunctions
+import org.springframework.web.reactive.function.server.ServerRequest
 import org.springframework.web.reactive.function.server.ServerResponse
 import java.nio.file.Path
 import java.time.Duration
@@ -50,9 +51,13 @@ class SpringFilterSteps {
     fun bedRoute(path: String) {
         val body = """{"name":"North bed","_links":{"self":{"href":"$path"}}}""".toByteArray()
         written[path] = body
-        route(path) {
-            ServerResponse.ok().contentType(HAL).header("ETag", "\"s1\"").header("Cache-Control", "no-cache")
-                .bodyValue(body)
+        route(path) { request ->
+            if (request.headers().header("If-None-Match").isNotEmpty()) {
+                ServerResponse.status(NOT_MODIFIED).header("ETag", "\"s1\"").build()
+            } else {
+                ServerResponse.ok().contentType(HAL).header("ETag", "\"s1\"").header("Cache-Control", "no-cache")
+                    .bodyValue(body)
+            }
         }
     }
 
@@ -150,6 +155,25 @@ class SpringFilterSteps {
 
     @When("the client with User-Agent {string} GETs {string}")
     fun getWithAgent(agent: String, path: String) = fetch(null, path, mapOf("User-Agent" to agent))
+
+    @When("client {string} GETs {string} conditionally")
+    fun getConditionally(clientId: String, path: String) =
+        fetch(clientId, path, mapOf("If-None-Match" to "\"s1\""))
+
+    @Given("Buster runs with a plugin that passes once the client is told nothing changed")
+    fun passesWhenNotModified() = start(
+        buster {
+            plugin("told-current") {
+                on(Layer.RESOURCE)
+                mutate {
+                    expect("be told the representation it holds is current", window = 5) {
+                        onSuperseded { pass("was told nothing changed") }
+                        onExpire { fail("never told") }
+                    }
+                }
+            }
+        },
+    )
 
     @When("htmx GETs {string}")
     fun getAsHtmx(path: String) = fetch(null, path, mapOf("HX-Request" to "true"))
@@ -373,8 +397,8 @@ class SpringFilterSteps {
     @Then("the context does not have a Buster filter")
     fun hasNoBuster() = assertTrue(!hasFilter)
 
-    private fun route(path: String, handler: () -> reactor.core.publisher.Mono<ServerResponse>) {
-        val added = RouterFunctions.route().GET(path) { handler() }.build()
+    private fun route(path: String, handler: (ServerRequest) -> reactor.core.publisher.Mono<ServerResponse>) {
+        val added = RouterFunctions.route().GET(path) { handler(it) }.build()
         routes = routes?.and(added) ?: added
     }
 
@@ -392,5 +416,6 @@ class SpringFilterSteps {
         const val SPAN = "00f067aa0ba902b7"
         const val NANOS_PER_MILLI = 1_000_000L
         const val BANNER_LOCATION = "spring.banner.location"
+        const val NOT_MODIFIED = 304
     }
 }

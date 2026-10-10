@@ -155,6 +155,29 @@ class CampaignSteps(private val world: World) {
         "${world.engine.campaignReport()}"
     }
 
+    @Then("the campaign has no coverage hole for {string}")
+    fun campaignNoHole(plugin: String) = assertFalse(plugin in world.engine.campaignReport().holes)
+
+    @Then("the campaign has not yet run {string}")
+    fun notYetRun(plugin: String) = assertTrue(plugin in world.engine.campaignReport().unrun) {
+        "${world.engine.campaignReport()}"
+    }
+
+    @Then("the campaign is not complete")
+    fun notComplete() = assertFalse(world.engine.campaignReport().complete)
+
+    @When("client {string} is answered {int} more mutated representations")
+    fun moreMutated(client: String, count: Int) = repeat(count) {
+        val request = BusterRequest("GET", "/beds/1", null, Headers(), client)
+        world.engine.request(request)
+        world.engine.respond(request, respond("an L1 Layer 1"))
+    }
+
+    @Then("the engine has kept all {int} mutations")
+    fun keptAll(count: Int) = assertTrue(world.engine.mutations().size >= count) {
+        "kept ${world.engine.mutations().size}"
+    }
+
     @Then("the campaign is ok")
     fun ok() = assertTrue(world.engine.campaignReport().ok) { "${world.engine.campaignReport()}" }
 

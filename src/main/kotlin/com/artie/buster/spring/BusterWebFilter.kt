@@ -80,6 +80,14 @@ class BusterWebFilter(
             return Result(res.body, record != null)
         }
 
+        /** A 304 has no body, so [writeWith] never runs: the client is told its held copy is current. */
+        override fun setComplete(): Mono<Void> {
+            if (req.isGet && statusCode?.value() == NOT_MODIFIED) {
+                engine.respond(req, BusterResponse(NOT_MODIFIED, Headers(headers), ByteArray(0)))
+            }
+            return super.setComplete()
+        }
+
         override fun writeAndFlushWith(body: Publisher<out Publisher<out DataBuffer>>): Mono<Void> =
             writeWith(Flux.from(body).concatMap { it })
     }
@@ -164,6 +172,7 @@ class BusterWebFilter(
         return mapOf(
             "mode" to report.mode.name, "round" to report.round, "planned" to report.planned,
             "made" to report.made, "coverage" to report.coverage, "holes" to report.holes,
+            "unrun" to report.unrun, "complete" to report.complete,
             "misaligned" to report.misaligned.map {
                 mapOf(
                     "label" to it.label, "index" to it.index, "plugin" to it.plugin,
@@ -194,5 +203,6 @@ class BusterWebFilter(
         private val HTML = MediaType(MediaType.TEXT_HTML, Charsets.UTF_8)
         private const val HX_REQUEST = "HX-Request"
         private const val OK = 200
+        private const val NOT_MODIFIED = 304
     }
 }
