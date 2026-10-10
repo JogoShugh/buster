@@ -7,12 +7,18 @@ sealed class Outcome(
 ) {
     open val reason: String get() = ""
 
+    /** Not settled yet: only a request or an event may answer with this, never an expiry. */
     data object Pending : Outcome("pending")
-    data class Pass(override val reason: String) : Outcome("pass")
-    data class Fail(override val reason: String) : Outcome("FAIL")
 
-    /** The client never did anything that could prove it right or wrong. */
-    data class Inconclusive(override val reason: String) : Outcome("inconclusive")
+    /**
+     * A verdict the wire gives: pass or FAIL. It is the only kind an expiry rule may return, so
+     * a check that could not be judged cannot be written: silence has to mean one or the other.
+     */
+    sealed class Decided(label: String) : Outcome(label)
+
+    data class Pass(override val reason: String) : Decided("pass")
+
+    data class Fail(override val reason: String) : Decided("FAIL")
 
     /**
      * The wire showed nothing wrong, and the client's own event log said it did the right
@@ -30,7 +36,7 @@ class Expectation(
     val description: String,
     val window: Int,
     val step: (BusterRequest) -> Outcome,
-    val expire: () -> Outcome,
+    val expire: () -> Outcome.Decided,
     val event: (ClientEvent) -> Outcome = { Outcome.Pending },
 )
 
@@ -46,7 +52,7 @@ class ExpectationBuilder(
     val trigger: BusterRequest,
 ) {
     private var step: (BusterRequest) -> Outcome = { Outcome.Pending }
-    private var expire: () -> Outcome = { Outcome.Inconclusive("window ended with no answer") }
+    private var expire: (() -> Outcome.Decided)? = null
     private var event: (ClientEvent) -> Outcome = { Outcome.Pending }
 
     fun onRequest(block: (BusterRequest) -> Outcome) {
@@ -60,21 +66,26 @@ class ExpectationBuilder(
 
     fun attest(reason: String): Outcome = Outcome.Attested(reason)
 
-    fun onExpire(block: () -> Outcome) {
+    /**
+     * What silence means: the client is done, or the round has ended, and nothing settled it.
+     * Required, and it can only return [pass] or [fail].
+     */
+    fun onExpire(block: () -> Outcome.Decided) {
         expire = block
     }
 
-    fun pass(reason: String): Outcome = Outcome.Pass(reason)
+    fun pass(reason: String): Outcome.Decided = Outcome.Pass(reason)
 
-    fun fail(reason: String): Outcome = Outcome.Fail(reason)
+    fun fail(reason: String): Outcome.Decided = Outcome.Fail(reason)
 
     fun pending(): Outcome = Outcome.Pending
 
-    fun inconclusive(reason: String): Outcome = Outcome.Inconclusive(reason)
-
     internal fun build(): Expectation {
         require(window >= 1) { "expectation '$description': window must be at least 1" }
-        return Expectation(description, window, step, expire, event)
+        val silence = requireNotNull(expire) {
+            "expectation '$description': no onExpire { } block, so silence has no meaning"
+        }
+        return Expectation(description, window, step, silence, event)
     }
 }
 

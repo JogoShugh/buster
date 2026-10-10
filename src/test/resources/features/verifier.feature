@@ -1,7 +1,8 @@
 Feature: Each mutation says what the client must do, judged from its next requests
   A plugin declares an expectation alongside its mutation. Buster watches the
   next requests from the same client and turns the expectation into a verdict:
-  pass, fail, or inconclusive when nothing could prove the client right or wrong.
+  pass, pass (attested) or FAIL. There is no fourth verdict. An expectation says
+  what silence means, so a check that could not be judged cannot be written.
   So every plugin is also a conformance test.
 
   Background:
@@ -50,6 +51,15 @@ Feature: Each mutation says what the client must do, judged from its next reques
       | rule | result |
       | pass | pass   |
       | FAIL | FAIL   |
+
+  Scenario: An expectation that does not say what silence means is refused
+    Given a plugin "mute" whose expectation has no onExpire block
+    When a Layer 1 response goes out through it
+    Then Buster refuses it, saying "no onExpire"
+
+  Scenario: There is no way to say a check could not be judged
+    Then the expectation DSL has no way to give an undecided verdict
+    And no Buster source or plugin script offers one
 
   Scenario: A verdict is logged with the mutation it judges
     When client "artie" sends GET /forms/abc

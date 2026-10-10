@@ -71,6 +71,12 @@ Feature: Buster runs as the first WebFilter in a Spring WebFlux server
     Then the report shows a pass verdict for client "ARTIE/0.5 (one)"
     And the report shows no FAIL verdict
 
+  Scenario: The live view counts pass, attested and FAIL
+    Given Buster runs with a plugin that notes "chewed the name"
+    When a client GETs "/beds/1"
+    And htmx GETs "/_buster/report"
+    Then the HTML fragment shows "attested"
+
   Scenario: The report escapes what it shows
     Given Buster runs with a plugin that notes "<script>alert(1)</script>"
     When a client GETs "/beds/1"

@@ -62,6 +62,7 @@ Feature: Plugins are Kotlin scripts loaded from a folder at runtime
       | does not compile     | plugin("broken") { on(Layer.NOWHERE) }  | NOWHERE                  |
       | breaks a DSL rule    | plugin("broken") { on(Layer.RESOURCE) } | no mutate { } block      |
       | throws while it runs | error("chewed through the cable")       | chewed through the cable |
+      | expires undecided    | plugin("broken") { on(Layer.RESOURCE); mutate { expect("x", 1) { onExpire { pending() } } } } | mismatch |
 
   Scenario: Files that are not plugin scripts are ignored
     Given the script "notes.kts":

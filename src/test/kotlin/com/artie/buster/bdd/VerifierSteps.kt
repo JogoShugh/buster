@@ -164,11 +164,53 @@ class VerifierSteps(private val world: World) {
     private companion object {
         /** The span of a later request: not the one whose response was mutated. */
         const val REREAD_SPAN = "2222222222222222"
+        val SOURCE_SUFFIXES = listOf(".kt", ".kts", ".feature")
     }
 
     private fun formsHref(): String {
         val doc = checkNotNull(Hal.parseObject(world.response.body))
         return checkNotNull(Hal.link(doc, Hal.FORMS_REL)).path("href").asText()
+    }
+
+    private var refused: Throwable? = null
+
+    @Given("a plugin {string} whose expectation has no onExpire block")
+    fun withoutOnExpire(name: String) {
+        world.plugins = buster {
+            plugin(name) {
+                on(Layer.RESOURCE)
+                mutate { expect("never says what silence means", 3) { onRequest { pending() } } }
+            }
+        }
+    }
+
+    @When("a Layer 1 response goes out through it")
+    fun goesOutThroughIt() {
+        refused = runCatching { world.layerOneGoesOut("/beds/1", "artie") }.exceptionOrNull()
+    }
+
+    @Then("Buster refuses it, saying {string}")
+    fun refusedSaying(message: String) {
+        val problem = checkNotNull(refused) { "Buster accepted an expectation with no onExpire" }
+        assertTrue(problem.message.orEmpty().contains(message)) { "refused with: ${problem.message}" }
+    }
+
+    @Then("the expectation DSL has no way to give an undecided verdict")
+    fun noUndecidedVerdict() {
+        val word = "incon" + "clusive"
+        val offered = com.artie.buster.core.ExpectationBuilder::class.java.methods.map { it.name.lowercase() }
+        assertTrue(offered.none { word in it }) { "the DSL still offers: ${offered.filter { word in it }}" }
+        assertTrue(Outcome::class.sealedSubclasses.none { word in it.simpleName.orEmpty().lowercase() })
+    }
+
+    @Then("no Buster source or plugin script offers one")
+    fun noSourceOffersOne() {
+        val word = "incon" + "clusive"
+        val found = listOf("src", "plugins", "samples").map { Path.of(it) }.filter { Files.exists(it) }
+            .flatMap { root -> Files.walk(root).use { it.filter(Files::isRegularFile).toList() } }
+            .filter { path -> SOURCE_SUFFIXES.any { path.toString().endsWith(it) } }
+            .filter { Files.readString(it).lowercase().contains(word) }
+        assertTrue(found.isEmpty()) { "still says it in: $found" }
     }
 
     @When("the run ends")
@@ -179,7 +221,6 @@ class VerifierSteps(private val world: World) {
         val expected = when (result) {
             "pass" -> Outcome.Pass(reason)
             "FAIL" -> Outcome.Fail(reason)
-            "inconclusive" -> Outcome.Inconclusive(reason)
             else -> error("unknown result $result")
         }
         assertEquals(expected, outcomeOf(plugin))
@@ -191,7 +232,6 @@ class VerifierSteps(private val world: World) {
             is Outcome.Pass -> "pass"
             is Outcome.Attested -> "attested"
             is Outcome.Fail -> "FAIL"
-            is Outcome.Inconclusive -> "inconclusive"
             Outcome.Pending -> "pending"
         }
         assertEquals(result, kind) { "verdicts: ${world.engine.verdicts()}" }

@@ -26,7 +26,7 @@ internal object LiveView {
               <span>mutations <b>${mutations.size}</b></span>
               <span class="pass">pass <b>${verdicts.countOf<Outcome.Pass>()}</b></span>
               <span class="FAIL">fail <b>${verdicts.countOf<Outcome.Fail>()}</b></span>
-              <span class="inconclusive">inconclusive <b>${verdicts.countOf<Outcome.Inconclusive>()}</b></span>
+              <span class="attested">attested <b>${verdicts.countOf<Outcome.Attested>()}</b></span>
               <span class="open">open <b>$open</b></span>
             </p>
             <div class="wrap"><table>
@@ -84,7 +84,8 @@ internal object LiveView {
   .meta { color:var(--muted); display:flex; flex-wrap:wrap; gap:6px 16px; margin:8px 0 12px; }
   .meta b { font-variant-numeric:tabular-nums; }
   .pass { color:var(--pass); } .FAIL { color:var(--fail); font-weight:600; } .open { color:var(--open); }
-  .inconclusive, .pending, .reason { color:var(--muted); }
+  .attested { color:var(--pass); }
+  .pending, .reason { color:var(--muted); }
   button { font:inherit; padding:4px 10px; border:1px solid var(--line); background:var(--row); color:var(--fg); border-radius:6px; cursor:pointer; }
   .wrap { overflow-x:auto; }
   table { border-collapse:collapse; width:100%; min-width:760px; }
