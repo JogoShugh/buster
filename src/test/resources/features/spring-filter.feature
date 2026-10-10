@@ -54,6 +54,23 @@ Feature: Buster runs as the first WebFilter in a Spring WebFlux server
     Then the client receives an HTML fragment with a "FAIL" verdict for plugin "forbid"
     And the response has Cache-Control "no-store"
 
+  Scenario: The live view marks what Buster did with a terrier
+    Given Buster runs with a plugin that notes "chewed the name"
+    When a client GETs "/beds/1"
+    And htmx GETs "/_buster/report"
+    Then the HTML fragment shows "🐕 chewed the name"
+    And the response is HTML in UTF-8
+
+  # Buster judges each mutation from the same client's next requests, so it must tell
+  # clients apart. User-Agent names the client software; give each client its own.
+  Scenario: Buster tells clients apart by User-Agent
+    Given Buster runs with a plugin that expects no GET of "/forbidden"
+    When the client with User-Agent "ARTIE/0.5 (one)" GETs "/beds/1"
+    And the client with User-Agent "ARTIE/0.5 (two)" GETs "/forbidden"
+    And a client GETs "/_buster/report?flush=true"
+    Then the report shows an inconclusive verdict for client "ARTIE/0.5 (one)"
+    And the report shows no FAIL verdict
+
   Scenario: The report escapes what it shows
     Given Buster runs with a plugin that notes "<script>alert(1)</script>"
     When a client GETs "/beds/1"

@@ -90,6 +90,9 @@ class SpringFilterSteps {
     @When("client {string} GETs {string}")
     fun getAs(clientId: String, path: String) = fetch(clientId, path)
 
+    @When("the client with User-Agent {string} GETs {string}")
+    fun getWithAgent(agent: String, path: String) = fetch(null, path, mapOf("User-Agent" to agent))
+
     @When("htmx GETs {string}")
     fun getAsHtmx(path: String) = fetch(null, path, mapOf("HX-Request" to "true"))
 
@@ -168,6 +171,24 @@ class SpringFilterSteps {
         assertTrue(result.responseHeaders.contentType?.isCompatibleWith(MediaType.TEXT_HTML) == true)
         val row = Regex("""<tr data-plugin="${Regex.escape(plugin)}">.*?</tr>""").find(String(body()))?.value
         assertTrue(row?.contains("""class="verdict $verdict">$verdict<""") == true) { "row: $row" }
+    }
+
+    @Then("the HTML fragment shows {string}")
+    fun fragmentShows(shown: String) {
+        val html = String(body(), Charsets.UTF_8)
+        assertTrue(html.contains(shown)) { html }
+    }
+
+    @Then("the response is HTML in UTF-8")
+    fun htmlUtf8() {
+        val type = checkNotNull(result.responseHeaders.contentType)
+        assertTrue(type.isCompatibleWith(MediaType.TEXT_HTML) && type.charset == Charsets.UTF_8) { "type: $type" }
+    }
+
+    @Then("the report shows no FAIL verdict")
+    fun noFail() {
+        val verdicts = checkNotNull(Hal.parseObject(body())).path("verdicts").toList()
+        assertTrue(verdicts.none { it["result"].asText() == "FAIL" }) { "verdicts: $verdicts" }
     }
 
     @Then("the HTML fragment shows {string} and never {string}")

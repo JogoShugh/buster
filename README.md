@@ -219,14 +219,21 @@ the `buster` profile turns it on.
 | `buster.plugins` | The folder of `*.buster.kts` scripts | `plugins` (`../buster/plugins` in server-spring) |
 | `buster.seed` | The run's seed. Unset means a random one, logged for replay. | random |
 | `buster.log` | A file for the JSON Lines log | in memory only |
-| `buster.client-header` | The header that names the client, so expectations are judged per client | `X-Buster-Client` |
+| `buster.client-header` | The header that names the client, so expectations are judged per client | `User-Agent` |
 | `buster.pace` | Slow motion: how long to hold each mutated response, such as `2s`. Responses Buster leaves alone are never held. | `0s` |
+
+Buster judges each mutation from the same client's next requests, so it must
+tell clients apart. It does that by `User-Agent`, which exists to name the
+client software. Give each client its own, such as
+`ARTIE/0.5 (two-clients; second)`. Without one, Buster falls back to the
+remote address, and every client on one machine counts as one.
 
 ### Watching a run
 
 Open `/_buster` in a browser for the live view. It is a small htmx page:
 every second it asks `/_buster/report` for HTML, and the server renders one
-row per mutation, newest first, with its verdicts as they land. **End run**
+row per mutation, newest first, with its verdicts as they land. 🐕 marks
+what Buster did; the verdict column is what the client did about it. **End run**
 closes every open expectation. With `buster.pace` set, the mutations arrive
 one at a time, slow enough to follow.
 

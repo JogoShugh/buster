@@ -39,7 +39,7 @@ internal object LiveView {
     private fun row(m: MutationRecord, verdicts: List<Verdict>): String {
         val cells = listOf(
             esc(m.seq), esc(m.clientId), "<code>${esc(m.method)} ${esc(m.path)}</code>", esc(m.plugin),
-            esc(m.spec.joinToString(", ")), esc(m.detail), verdictCell(verdicts),
+            esc(m.spec.joinToString(", ")), "$BUSTER ${esc(m.detail)}", verdictCell(verdicts),
         )
         return """<tr data-plugin="${esc(m.plugin)}">${cells.joinToString("") { "<td>$it</td>" }}</tr>"""
     }
@@ -57,7 +57,10 @@ internal object LiveView {
 
     private inline fun <reified T : Outcome> List<Verdict>.countOf() = count { it.outcome is T }
 
-    private val HEADINGS =listOf("#", "client", "request", "plugin", "spec", "what changed", "verdict")
+    /** Marks Buster's doing, as against the client's. */
+    private const val BUSTER = "🐕"
+
+    private val HEADINGS = listOf("#", "client", "request", "plugin", "spec", "$BUSTER Buster did", "client did")
 
     val PAGE = """
 <!doctype html>
@@ -65,7 +68,7 @@ internal object LiveView {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Buster live</title>
+<title>🐕 Buster live</title>
 <script src="https://unpkg.com/htmx.org@2.0.3/dist/htmx.min.js"
   integrity="sha384-0895/pl2MU10Hqc6jd4RvrthNlDiE9U1tWmX7WRESftEDRosgxNsQG/Ze9YMRzHq"
   crossorigin="anonymous"></script>
@@ -94,7 +97,7 @@ internal object LiveView {
 <body>
 <main>
   <header>
-    <h1>Buster live</h1>
+    <h1>🐕 Buster live</h1>
     <button hx-get="/_buster/report?flush=true" hx-target="#report" title="Close every open expectation now">End run</button>
     <a href="/_buster/report">raw JSON</a>
   </header>

@@ -42,7 +42,7 @@ class BusterWebFilter(
     override fun filter(exchange: ServerWebExchange, chain: WebFilterChain): Mono<Void> =
         when (exchange.request.path.value()) {
             REPORT_PATH -> report(exchange)
-            VIEW_PATH -> write(exchange, MediaType.TEXT_HTML, LiveView.PAGE.toByteArray())
+            VIEW_PATH -> write(exchange, HTML, LiveView.PAGE.toByteArray())
             else -> {
                 val req = toBuster(exchange.request)
                 engine.request(req)
@@ -104,7 +104,7 @@ class BusterWebFilter(
         val verdicts = engine.verdicts()
         if (exchange.request.headers.getFirst(HX_REQUEST) == "true") {
             val rows = LiveView.rows(engine.seed, pace.toMillis(), mutations, verdicts)
-            return write(exchange, MediaType.TEXT_HTML, rows.toByteArray())
+            return write(exchange, HTML, rows.toByteArray())
         }
         val body = Hal.mapper.writeValueAsBytes(
             mapOf(
@@ -125,7 +125,9 @@ class BusterWebFilter(
     companion object {
         const val REPORT_PATH = "/_buster/report"
         const val VIEW_PATH = "/_buster"
-        const val DEFAULT_CLIENT_HEADER = "X-Buster-Client"
+        /** User-Agent names the client software, so each client should send its own. */
+        const val DEFAULT_CLIENT_HEADER = "User-Agent"
+        private val HTML = MediaType(MediaType.TEXT_HTML, Charsets.UTF_8)
         private const val HX_REQUEST = "HX-Request"
         private const val OK = 200
     }
