@@ -1,6 +1,7 @@
 package com.artie.buster.bdd
 
 import com.artie.buster.core.BusterRequest
+import com.artie.buster.core.BusterResponse
 import com.artie.buster.core.Forms
 import com.artie.buster.core.Hal
 import com.artie.buster.core.Headers
@@ -94,6 +95,23 @@ class PluginPackSteps(private val world: World) {
     /** The same, from a server that sends no Content-Location: only the HAL self link says which bed. */
     @Given("an L1 act response with only a self link goes out to client {string}")
     fun actWithSelfLink(client: String) = world.actGoesOut(client, null, "forms=link", fixture("resource"))
+
+    /**
+     * The server answers the same client's later GET of the resource in full, and the plugin does
+     * not touch it. An L0 response is one these plugins leave alone, as the live server's
+     * unmutated response would be.
+     */
+    @When("client {string} is answered an unmutated representation of {string}")
+    fun answeredUnmutated(client: String, path: String) {
+        val request = BusterRequest("GET", path, null, Headers(), client)
+        val headers = Headers()
+        headers["Content-Type"] = "application/hal+json"
+        headers["Cache-Control"] = "no-cache"
+        headers["ETag"] = "\"s2\""
+        val response = BusterResponse(200, headers, fixture("resource-l0").toByteArray())
+        world.engine.request(request)
+        world.engine.respond(request, response)
+    }
 
     @Given("an L0 Layer 1 response goes out to client {string}")
     fun l0GoesOut(client: String) = world.layerOneGoesOut("/beds/1", client, body = fixture("resource-l0"))

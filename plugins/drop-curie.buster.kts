@@ -23,6 +23,7 @@ plugin("drop-curie") {
                 if (ev.name == "forms.missing" && ev.spanId == span) attest("its log says it found no forms link") else pending()
             }
             onRequest { req -> if (req.isGet && req.path == href) fail("followed $key to $href") else pending() }
+            onSuperseded { pass("read the resource again, and was answered a whole representation, before following $key") }
             onExpire { pass("never followed $key") }
         }
     }

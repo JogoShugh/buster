@@ -167,9 +167,15 @@ class VerifierSteps(private val world: World) {
         val SOURCE_SUFFIXES = listOf(".kt", ".kts", ".feature")
     }
 
+    /**
+     * The forms link as the client received it. A mutation can take it out (the CURIE no longer
+     * expands), and then the link as the server wrote it is the one a client following it anyway
+     * would use.
+     */
     private fun formsHref(): String {
-        val doc = checkNotNull(Hal.parseObject(world.response.body))
-        return checkNotNull(Hal.link(doc, Hal.FORMS_REL)).path("href").asText()
+        val received = Hal.parseObject(world.response.body)?.let { Hal.link(it, Hal.FORMS_REL) }
+        val written = Hal.parseObject(world.original.body)?.let { Hal.link(it, Hal.FORMS_REL) }
+        return checkNotNull(received ?: written).path("href").asText()
     }
 
     private var refused: Throwable? = null

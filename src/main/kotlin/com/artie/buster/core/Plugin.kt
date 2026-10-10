@@ -68,6 +68,6 @@ class MutationScope(
 
     /** What the client must do next, judged over its next [window] requests. */
     fun expect(description: String, window: Int, block: ExpectationBuilder.() -> Unit) {
-        expectations += ExpectationBuilder(description, window, request).apply(block).build()
+        expectations += ExpectationBuilder(description, window, request, resourcePath).apply(block).build()
     }
 }

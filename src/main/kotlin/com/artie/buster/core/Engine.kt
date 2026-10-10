@@ -47,20 +47,30 @@ class Engine(
      */
     fun respond(req: BusterRequest, res: BusterResponse, future: List<BusterRequest>? = null): MutationRecord? {
         val classification = Classifier.classify(res)
-        return when (campaign.mode) {
-            Campaign.Mode.RECORDING -> {
-                campaign.record(req, res, classification)
-                null
-            }
-            Campaign.Mode.ARMED -> campaign.armedFor(req)?.let { combo ->
-                val plugin = plugins.firstOrNull { it.name == combo.plugin } ?: return null
-                val n = seq.incrementAndGet()
-                val random = Random(seed xor (n * SEED_MIX))
-                val future = campaign.futureOf(combo.label, combo.index)
-                apply(plugin, Exchange(req, res, classification, n), random, future)
-            }
-            Campaign.Mode.OFF -> bySeed(req, res, classification, future)
+        if (campaign.mode == Campaign.Mode.RECORDING) {
+            campaign.record(req, res, classification)
+            return null
         }
+        val record = if (campaign.mode == Campaign.Mode.ARMED) {
+            armed(req, res, classification)
+        } else {
+            bySeed(req, res, classification, future)
+        }
+        // A whole, unmutated representation replaces whatever the client was given before.
+        if (record == null && req.isGet && res.status in SUCCESS) {
+            verifier.superseded(req.clientId, Resource.pathOf(req, res))
+        }
+        return record
+    }
+
+    private fun armed(req: BusterRequest, res: BusterResponse, classification: Classification): MutationRecord? {
+        val combo = campaign.armedFor(req)
+        val plugin = combo?.let { c -> plugins.firstOrNull { it.name == c.plugin } }
+        if (combo == null || plugin == null) return null
+        val n = seq.incrementAndGet()
+        val random = Random(seed xor (n * SEED_MIX))
+        val known = campaign.futureOf(combo.label, combo.index)
+        return apply(plugin, Exchange(req, res, classification, n), random, known)
     }
 
     private fun bySeed(
@@ -90,14 +100,6 @@ class Engine(
         val classification: Classification,
         val seq: Long,
     )
-
-    private fun pick(candidates: List<Plugin>, random: Random): Plugin {
-        var ticket = random.nextInt(candidates.sumOf { it.weight })
-        return candidates.first {
-            ticket -= it.weight
-            ticket < 0
-        }
-    }
 
     private fun apply(plugin: Plugin, ex: Exchange, random: Random, future: List<BusterRequest>?): MutationRecord? {
         // The plugin works on a copy, so a skip leaves the real response exactly as it was.
@@ -133,6 +135,7 @@ class Engine(
 
     private companion object {
         const val MAX_KEPT = 1_000
+        val SUCCESS = 200..299
     }
 }
 
@@ -164,3 +167,11 @@ data class CampaignReport(
     val failures: Int,
     val ok: Boolean,
 )
+
+private fun pick(candidates: List<Plugin>, random: Random): Plugin {
+    var ticket = random.nextInt(candidates.sumOf { it.weight })
+    return candidates.first {
+        ticket -= it.weight
+        ticket < 0
+    }
+}

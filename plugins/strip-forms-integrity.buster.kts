@@ -26,6 +26,7 @@ plugin("strip-forms-integrity") {
                 }
             }
             onRequest { req -> if (req.isGet && req.path == href) fail("followed $href") else pending() }
+            onSuperseded { pass("read the resource again, and was answered a whole representation, before following $href") }
             onExpire { pass("never followed $href") }
         }
     }

@@ -29,6 +29,7 @@ plugin("alias-forms-href") {
                     else -> pending()
                 }
             }
+            onSuperseded { pass("read the resource again, and was answered a whole representation, before following $href") }
             onExpire { fail("never followed the forms link, which its dry run did") }
         }
     }

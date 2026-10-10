@@ -127,6 +127,41 @@ Feature: The first plugin pack attacks the client rules the spec names
       | relax-layer1-cache     | GET /beds/1                              | an L1 act response naming "/beds/1"    | nothing                                             | pass   |
       | lie-preference-applied | GET the forms link                       | an L1 act response naming "/beds/1"    | GET /beds/1, PUT /beds/1/name                       | pass   |
 
+  # Buster sends no-store with a mutation, so the client keeps nothing. If the client enters
+  # the resource again, it gets a whole, unmutated representation, and what it does with
+  # that is its own business. The mutated one is gone; judging the client on the fresh one
+  # would fail a client for doing exactly what it should.
+  Scenario Outline: <plugin>: a fresh, unmutated representation of the resource replaces the mutated one
+    Given only the "<plugin>" plugin from the pack
+    And the dry run of that client sends GET the forms link
+    And an L1 Layer 1 response goes out to client "artie"
+    When client "artie" is answered an unmutated representation of "/beds/1"
+    And client "artie" sends GET the forms link
+    And the run ends
+    Then the verdict for "<plugin>" is pass
+
+    Examples:
+      | plugin                 |
+      | drop-curie             |
+      | lie-preference-applied |
+      | strip-forms-integrity  |
+      | alias-forms-href       |
+
+  Scenario: Following the link before the fresh representation arrives still FAILs
+    Given only the "drop-curie" plugin from the pack
+    And the dry run of that client sends GET the forms link
+    And an L1 Layer 1 response goes out to client "artie"
+    When client "artie" sends GET the forms link
+    And client "artie" is answered an unmutated representation of "/beds/1"
+    Then the verdict for "drop-curie" is FAIL
+
+  Scenario: Another client's fresh representation changes nothing
+    Given only the "drop-curie" plugin from the pack
+    And the dry run of that client sends GET the forms link
+    And an L1 Layer 1 response goes out to client "artie"
+    When client "someone-else" is answered an unmutated representation of "/beds/1"
+    Then "drop-curie" has no verdict yet
+
   Scenario: relax-layer1-cache is not made on an act's response nobody reads again
     An act is a write, so it carries no Cache-Control directive to judge. The rule is
     about reading the resource again, so it is made only where the client does.

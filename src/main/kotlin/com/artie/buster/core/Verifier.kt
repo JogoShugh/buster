@@ -35,9 +35,23 @@ sealed class Outcome(
 class Expectation(
     val description: String,
     val window: Int,
+    /** The resource whose mutated representation this expectation is about. */
+    val resource: String,
+    rules: Rules,
+) {
+    val step = rules.step
+    val expire = rules.expire
+    val event = rules.event
+    val superseded = rules.superseded
+}
+
+/** How an expectation reads each kind of evidence. */
+class Rules(
     val step: (BusterRequest) -> Outcome,
     val expire: () -> Outcome.Decided,
-    val event: (ClientEvent) -> Outcome = { Outcome.Pending },
+    val event: (ClientEvent) -> Outcome,
+    /** Runs when the client is later answered a whole, unmutated representation of the resource. */
+    val superseded: (() -> Outcome.Decided)?,
 )
 
 /** Builds an [Expectation] inside a plugin's mutate block. */
@@ -50,10 +64,13 @@ class ExpectationBuilder(
      * with this; the surrounding mutate block's own `request` is out of reach inside expect.
      */
     val trigger: BusterRequest,
+    /** The resource the mutated response is the state of; see [MutationScope.resourcePath]. */
+    private val resource: String = "",
 ) {
     private var step: (BusterRequest) -> Outcome = { Outcome.Pending }
     private var expire: (() -> Outcome.Decided)? = null
     private var event: (ClientEvent) -> Outcome = { Outcome.Pending }
+    private var superseded: (() -> Outcome.Decided)? = null
 
     fun onRequest(block: (BusterRequest) -> Outcome) {
         step = block
@@ -74,6 +91,16 @@ class ExpectationBuilder(
         expire = block
     }
 
+    /**
+     * The client entered the resource again and was answered a whole, unmutated representation.
+     * Buster sends no-store with a mutation, so the client kept nothing of the mutated one, and
+     * what it does with the fresh one is its own business. The window closes here, so the
+     * mutated representation is not what the client is judged on after it.
+     */
+    fun onSuperseded(block: () -> Outcome.Decided) {
+        superseded = block
+    }
+
     fun pass(reason: String): Outcome.Decided = Outcome.Pass(reason)
 
     fun fail(reason: String): Outcome.Decided = Outcome.Fail(reason)
@@ -85,7 +112,7 @@ class ExpectationBuilder(
         val silence = requireNotNull(expire) {
             "expectation '$description': no onExpire { } block, so silence has no meaning"
         }
-        return Expectation(description, window, step, silence, event)
+        return Expectation(description, window, resource, Rules(step, silence, event, superseded))
     }
 }
 
@@ -149,6 +176,22 @@ class Verifier(private val log: MutationLog) {
                 close(o, outcome)
                 iterator.remove()
             }
+        }
+    }
+
+    /**
+     * A whole, unmutated representation of [resource] went to [clientId]. Expectations about the
+     * mutated one that say what that means close here.
+     */
+    @Synchronized
+    fun superseded(clientId: String, resource: String) {
+        val list = open[clientId] ?: return
+        val iterator = list.iterator()
+        while (iterator.hasNext()) {
+            val o = iterator.next()
+            val outcome = o.exp.superseded?.takeIf { o.exp.resource == resource }?.invoke() ?: continue
+            close(o, outcome)
+            iterator.remove()
         }
     }
 

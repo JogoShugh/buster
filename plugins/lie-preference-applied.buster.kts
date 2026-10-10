@@ -34,6 +34,7 @@ plugin("lie-preference-applied") {
             onEvent { ev ->
                 if (ev.name == "forms.skipped" && ev.spanId == span) attest("its log says it skipped $href at L0") else pending()
             }
+            onSuperseded { pass("read $path again, and was answered a whole representation, before following $href") }
             onExpire { pass("treated $path as L0 with no affordances") }
         }
     }
