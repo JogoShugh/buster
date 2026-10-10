@@ -1,5 +1,6 @@
 package com.artie.buster.core
 
+import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.node.ObjectNode
 
@@ -13,6 +14,8 @@ object Hal {
     /** _forms (HAL Schema Forms) or _templates (HAL-FORMS). */
     fun embeddedForms(doc: ObjectNode): ObjectNode? =
         (doc.get("_forms") ?: doc.get("_templates")) as? ObjectNode
+
+    fun write(node: JsonNode): ByteArray = mapper.writeValueAsBytes(node)
 }
 
 /** Decides layer, rung and dialect from the response alone, as a client would. */

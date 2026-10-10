@@ -41,6 +41,26 @@ class Headers(initial: Map<String, List<String>> = emptyMap()) {
     fun toMap(): Map<String, List<String>> = values.mapKeys { names[it.key] ?: it.key }
 
     fun copy() = Headers(toMap())
+
+    /** Makes this map hold exactly what [other] holds. */
+    fun replaceWith(other: Headers) {
+        values.clear()
+        names.clear()
+        other.toMap().forEach { (name, list) -> list.forEach { add(name, it) } }
+    }
+}
+
+/** An inbound request as Buster sees it. Read-only to plugins. */
+data class BusterRequest(
+    val method: String,
+    val path: String,
+    val query: String? = null,
+    val headers: Headers = Headers(),
+    val clientId: String = "anonymous",
+) {
+    val isAct get() = method.uppercase() !in setOf("GET", "HEAD", "OPTIONS")
+    val isGet get() = method.equals("GET", ignoreCase = true)
+    val ifMatch get() = headers["If-Match"]
 }
 
 /** An outbound response, mutable by plugins. */
@@ -48,7 +68,16 @@ class BusterResponse(
     var status: Int,
     val headers: Headers,
     var body: ByteArray,
-)
+) {
+    fun copy() = BusterResponse(status, headers.copy(), body.copyOf())
+
+    /** Makes this response hold exactly what [other] holds. */
+    fun replaceWith(other: BusterResponse) {
+        status = other.status
+        headers.replaceWith(other.headers)
+        body = other.body
+    }
+}
 
 /** What Buster decided a response is. */
 data class Classification(val layer: Layer, val rung: Rung, val dialect: Dialect)
