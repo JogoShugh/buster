@@ -200,15 +200,19 @@ correct `Content-Length`.
 The `buster` profile is the one switch: without it none of Buster's beans
 exist. Spring is `compileOnly`, so Buster uses the host server's Spring.
 
-In ARTIE's `server-spring`, Buster comes in through a composite build when
-`../buster` is checked out, as a `developmentOnly` dependency. Spring Boot
-leaves `developmentOnly` out of the boot jar, so a production build carries
-no Buster code at all.
+In ARTIE's `server-spring`, Buster is opt-in. Only `-Pbuster=on` brings it
+in, through a composite build of `../buster`, as a `developmentOnly`
+dependency. Without the flag the server's build never sees Buster. Spring
+Boot leaves `developmentOnly` out of the boot jar, so a production build
+carries no Buster code at all.
 
 ```
 cd ../server-spring
-SPRING_PROFILES_ACTIVE=buster BUSTER_SEED=42 ./gradlew bootRun
+SPRING_PROFILES_ACTIVE=buster BUSTER_SEED=42 ./gradlew bootRun -Pbuster=on
 ```
+
+Two switches, both needed: `-Pbuster=on` puts Buster on the classpath, and
+the `buster` profile turns it on.
 
 | Property | Meaning | Default |
 | - | - | - |
