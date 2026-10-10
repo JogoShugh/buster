@@ -51,6 +51,17 @@ Feature: A campaign aims every mutation where the client will exercise the rule
     When the campaign is planned
     Then the plan arms "drop-affordance" for client "alice" on request 1
 
+  # A readiness probe checks that the server is up. It is not a client under test, and
+  # arming it would mutate a check that has no rule to follow.
+  Scenario: A readiness probe is left out of the plan
+    Given a campaign over the plugin pack that ignores clients matching "^curl/"
+    And the campaign starts recording
+    And client "curl/8.4.0" requests GET "/beds/1" and gets an L1 Layer 1
+    And client "alice" requests GET "/beds/1" and gets an L1 Layer 1
+    When the campaign is planned
+    Then the plan arms "relax-layer1-cache" for client "alice" on request 1
+    And the plan does not arm "relax-layer1-cache" for client "curl/8.4.0"
+
   Scenario: Each round arms at most one combination for each client
     Given a campaign over the plugin pack
     And the campaign starts recording

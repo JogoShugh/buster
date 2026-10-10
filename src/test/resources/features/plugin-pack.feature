@@ -82,6 +82,13 @@ Feature: The first plugin pack attacks the client rules the spec names
       | flip-byte              | a schema          | integrity.refused | that response     |
       | strip-forms-integrity  | an L1 Layer 1     | integrity.refused | the forms link    |
 
+  Scenario: relax-layer1-cache leaves the service index alone
+    The service index is a JSON Home document, not a Layer 1 resource, so the rule
+    that Layer 1 is never fresh is not about it.
+    Given only the "relax-layer1-cache" plugin from the pack
+    And a service index response goes out to client "artie"
+    Then the response went out unchanged
+
   Scenario: drop-affordance: a client whose log says it found the dropped affordance gone gets an attested pass
     After a 412 a client re-reads the resource, finds the affordance gone and drops
     its act. The event names the relation and the span of the re-read, not of the

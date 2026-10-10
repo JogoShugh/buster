@@ -22,6 +22,12 @@ class CampaignSteps(private val world: World) {
     @Given("a campaign over the plugin pack")
     fun overPack() = start(pack())
 
+    @Given("a campaign over the plugin pack that ignores clients matching {string}")
+    fun overPackIgnoring(pattern: String) {
+        world.plugins = pack()
+        world.engine = Engine(world.plugins, SEED, world.log, campaignIgnore = Regex(pattern))
+    }
+
     @Given("a campaign over the plugins {string}")
     fun overPlugins(names: String) {
         val wanted = names.split(",").map { it.trim() }.toSet()

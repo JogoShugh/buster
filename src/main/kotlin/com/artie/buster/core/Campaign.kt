@@ -51,7 +51,13 @@ data class Plan(
  * an exchange is known by its request's position, so a second run that sends the same requests
  * in the same order hits the same exchanges.
  */
-class Campaign(private val plugins: List<Plugin>, private val seed: Long, private val verifier: Verifier) {
+class Campaign(
+    private val plugins: List<Plugin>,
+    private val seed: Long,
+    private val verifier: Verifier,
+    /** Clients whose label matches are left out: a readiness probe is not a client under test. */
+    private val ignore: Regex? = null,
+) {
     enum class Mode { OFF, RECORDING, ARMED }
 
     @Volatile
@@ -87,23 +93,25 @@ class Campaign(private val plugins: List<Plugin>, private val seed: Long, privat
     /** Counts a request, so its position among its client's requests is known when it is answered. */
     @Synchronized
     fun observe(req: BusterRequest) {
-        live.getOrPut(req.label) { mutableListOf() } += req
+        if (!ignored(req)) live.getOrPut(req.label) { mutableListOf() } += req
     }
 
     @Synchronized
     fun record(req: BusterRequest, res: BusterResponse, classification: Classification) {
+        if (ignored(req)) return
         recorded += RecordedExchange(req.label, indexOf(req), req, res.copy(), classification)
     }
 
     /** The planned combination for this exchange, when a round is armed. */
     @Synchronized
     fun armedFor(req: BusterRequest): Combination? =
-        if (mode == Mode.ARMED) armed[req.label to indexOf(req)] else null
+        if (mode == Mode.ARMED && !ignored(req)) armed[req.label to indexOf(req)] else null
 
     /** Combinations planned for this exchange, for a run that is not armed but has a plan. */
     @Synchronized
     fun plannedFor(req: BusterRequest): List<Combination>? {
-        val all = lastPlan?.rounds?.flatten() ?: return null
+        val all = lastPlan?.rounds?.flatten()
+        if (all == null || ignored(req)) return null
         val index = indexOf(req)
         return all.filter { it.label == req.label && it.index == index }
     }
@@ -150,6 +158,8 @@ class Campaign(private val plugins: List<Plugin>, private val seed: Long, privat
         round = 0
         mode = Mode.OFF
     }
+
+    private val ignored: (BusterRequest) -> Boolean = { req -> ignore?.containsMatchIn(req.label) == true }
 
     private fun indexOf(req: BusterRequest): Int {
         val list = live.getOrPut(req.label) { mutableListOf() }

@@ -40,6 +40,13 @@ class World {
     fun immutableGoesOut(path: String, client: String, contentType: String, body: String) =
         goesOut(path, client, BusterResponse(200, headers(contentType, IMMUTABLE), body.toByteArray()))
 
+    /** The service index: JSON Home, with an ETag, and nothing a Layer 1 resource is. */
+    fun indexGoesOut(client: String) {
+        val headers = headers("application/json-home", "no-cache")
+        headers["ETag"] = "\"index-1\""
+        goesOut("/", client, BusterResponse(200, headers, INDEX.toByteArray()))
+    }
+
     /** A plain JSON 200 from an ordinary API: no ETag, nothing H.E.A.R.T. about it. */
     fun plainJsonGoesOut(path: String, client: String) =
         goesOut(path, client, BusterResponse(200, headers("application/json", "no-cache"), TODO.toByteArray()))
@@ -84,6 +91,7 @@ class World {
         /** The span of every request a scenario sends out; an event about "that response" names it. */
         const val SPAN = "00f067aa0ba902b7"
         private const val BED = """{"name":"North bed"}"""
+        private const val INDEX = """{"api":{"title":"Garden beds","links":{}},"resources":{}}"""
         private const val TODO = """{"id":1,"title":"Walk Buster","done":false}"""
         private const val PROBLEM = """{"status":404,"title":"Not Found"}"""
         private const val IMMUTABLE = "public, max-age=31536000, immutable"

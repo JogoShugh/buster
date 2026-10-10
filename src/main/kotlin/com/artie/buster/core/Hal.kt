@@ -89,12 +89,16 @@ object Classifier {
         val placed = when {
             doc == null -> null
             res.headers["Cache-Control"].orEmpty().lowercase().contains("immutable") -> immutable(doc)
-            res.headers.has("ETag") -> Layer.RESOURCE to rungApplied(res.headers["Preference-Applied"])
+            // Layer 1 is HAL. A JSON Home service index or a plain JSON document with an ETag is not.
+            res.headers.has("ETag") && isHal(contentType) ->
+                Layer.RESOURCE to rungApplied(res.headers["Preference-Applied"])
             else -> null
         }
         val (layer, rung) = placed ?: (Layer.OTHER to Rung.L0)
         return Classification(layer, rung, dialect)
     }
+
+    private fun isHal(contentType: String) = "hal+json" in contentType || "hal-forms" in contentType
 
     private const val SUCCESS_FIRST = 200
     private const val SUCCESS_LAST = 299

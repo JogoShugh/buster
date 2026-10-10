@@ -23,6 +23,8 @@ Feature: Buster classifies a response the way a client would
       | error status                                | 404    | application/problem+json    | no-cache                          | s1   |                          | resource             | OTHER          | L0   |
       | not JSON                                    | 200    | text/html                   | no-cache                          | s1   |                          | resource             | OTHER          | L0   |
       | JSON without an ETag and not immutable      | 200    | application/json            | no-cache                          |      |                          | resource             | OTHER          | L0   |
+      | the service index, JSON Home with an ETag   | 200    | application/json-home      | no-cache                          | s1   |                          | resource             | OTHER          | L0   |
+      | plain JSON with an ETag is not HAL          | 200    | application/json            | no-cache                          | s1   |                          | resource             | OTHER          | L0   |
       | body that is not a JSON object              | 200    | application/hal+json        | no-cache                          | s1   |                          | array                | OTHER          | L0   |
 
   Scenario: A HAL-FORMS response is classified in the HAL-FORMS dialect

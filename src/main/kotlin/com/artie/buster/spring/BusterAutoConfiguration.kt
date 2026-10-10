@@ -34,6 +34,12 @@ class BusterProperties {
     /** Slow motion: how long to hold each mutated response, such as 2s. Zero holds nothing. */
     var pace: Duration = Duration.ZERO
 
+    /**
+     * Clients whose label (User-Agent) matches are left out of a campaign: a readiness probe is
+     * not a client under test. Empty ignores none.
+     */
+    var campaignIgnore: String = "^(curl|Wget)/"
+
     /** A client's event log (JSON Lines) to read as it grows; unset reads none. Events can also be POSTed. */
     var clientEvents: String? = null
 }
@@ -57,7 +63,8 @@ class BusterAutoConfiguration {
         report.failures.forEach { log.note("plugin script ${it.file} failed: ${it.messages.joinToString("; ")}") }
         val seed = properties.seed ?: Random.nextLong()
         log.note("seed $seed; plugins ${report.plugins.joinToString { it.name }}")
-        return Engine(report.plugins, seed, log)
+        val ignore = properties.campaignIgnore.takeIf { it.isNotBlank() }?.let { Regex(it) }
+        return Engine(report.plugins, seed, log, campaignIgnore = ignore)
     }
 
     @Bean

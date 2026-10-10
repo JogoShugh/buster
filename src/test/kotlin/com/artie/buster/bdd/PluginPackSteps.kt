@@ -89,6 +89,9 @@ class PluginPackSteps(private val world: World) {
     @Given("an L0 Layer 1 response goes out to client {string}")
     fun l0GoesOut(client: String) = world.layerOneGoesOut("/beds/1", client, body = fixture("resource-l0"))
 
+    @Given("a service index response goes out to client {string}")
+    fun indexGoesOut(client: String) = world.indexGoesOut(client)
+
     @Given("an affordance set response goes out to client {string}")
     fun setGoesOut(client: String) =
         world.immutableGoesOut("/forms/sha256-abc", client, "application/hal+json", fixture("set-embedded-schemas"))

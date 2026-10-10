@@ -12,10 +12,12 @@ class Engine(
     val seed: Long,
     private val log: MutationLog,
     private val verifier: Verifier = Verifier(log),
+    /** Clients whose label matches are not recorded, planned or armed: a readiness probe, say. */
+    campaignIgnore: Regex? = null,
 ) {
     private val seq = AtomicLong()
     /** Records a dry run, plans it, and arms a round. Without one the seed chooses. */
-    val campaign = Campaign(plugins, seed, verifier)
+    val campaign = Campaign(plugins, seed, verifier, campaignIgnore)
 
     /** Every inbound request goes to the verifier before the server sees it. */
     fun request(req: BusterRequest) {
