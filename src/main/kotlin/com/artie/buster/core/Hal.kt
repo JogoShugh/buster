@@ -32,11 +32,51 @@ object Hal {
     fun link(doc: ObjectNode, rel: String): ObjectNode? =
         linkKey(doc, rel)?.let { links(doc)?.get(it) as? ObjectNode }
 
-    /** _forms (HAL Schema Forms) or _templates (HAL-FORMS). */
-    fun embeddedForms(doc: ObjectNode): ObjectNode? =
+    fun write(node: JsonNode): ByteArray = mapper.writeValueAsBytes(node)
+
+    /**
+     * Offsets of the ASCII letters inside JSON string literals. Changing one of them keeps the
+     * bytes valid JSON, so only an integrity check can tell.
+     */
+    fun lettersInStrings(bytes: ByteArray): List<Int> {
+        val found = mutableListOf<Int>()
+        var inString = false
+        var escaped = false
+        bytes.forEachIndexed { i, b ->
+            val c = b.toInt().toChar()
+            when {
+                escaped -> escaped = false
+                inString && c == '\\' -> escaped = true
+                c == '"' -> inString = !inString
+                inString && c.isLetter() && b >= 0 -> found += i
+            }
+        }
+        return found
+    }
+}
+
+/** Affordances in either dialect: HAL Schema Forms _forms or HAL-FORMS _templates. */
+object Forms {
+    fun embedded(doc: ObjectNode): ObjectNode? =
         (doc.get("_forms") ?: doc.get("_templates")) as? ObjectNode
 
-    fun write(node: JsonNode): ByteArray = mapper.writeValueAsBytes(node)
+    /** The target template of one form. */
+    fun target(form: JsonNode): String? =
+        form.path("_links").path("target").path("href").takeIf { it.isTextual }?.asText()
+            ?: form.path("target").takeIf { it.isTextual }?.asText()
+
+    fun method(form: JsonNode): String = form.path("method").asText("POST").uppercase()
+
+    /** Matches any expansion of an RFC 6570 Level 1 template; query parts are ignored. */
+    fun matcher(template: String): Regex {
+        val noQuery = template.replace(Regex("\\{[?&][^}]*}"), "").substringBefore('?')
+        return Regex(noQuery.split(Regex("\\{[^}]*}")).joinToString("[^/]+") { Regex.escape(it) })
+    }
+
+    /** True when [req] acts on [form]: same method, and a path its target template expands to. */
+    fun actsOn(req: BusterRequest, form: JsonNode): Boolean =
+        req.isAct && req.method.equals(method(form), ignoreCase = true) &&
+            target(form)?.let { matcher(it).matches(req.path) } == true
 }
 
 /** Decides layer, rung and dialect from the response alone, as a client would. */
@@ -62,7 +102,7 @@ object Classifier {
 
     /** Layers 2 and 3 are the immutable ones. A set whose schemas are pointers is L2. */
     private fun immutable(doc: ObjectNode): Pair<Layer, Rung> {
-        val forms = Hal.embeddedForms(doc) ?: return Layer.SCHEMA to Rung.L2
+        val forms = Forms.embedded(doc) ?: return Layer.SCHEMA to Rung.L2
         val pointers = forms.elements().asSequence().any { it.path("schema").has("\$ref") }
         return Layer.AFFORDANCE_SET to if (pointers) Rung.L2 else Rung.L1
     }

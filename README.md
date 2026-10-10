@@ -1,5 +1,18 @@
 # Buster
 
+```
+     \\                           __
+      \\                        ,'  `.____
+       \\______________________/  (o)     `--o
+        \                          .------'    ~ chomp ~
+         |   ####                  |        [=|::::|=]
+         |   ####                  |
+          \_______________________/
+           ||  ||            ||  ||
+           ||  ||            ||  ||
+          (__)(__)          (__)(__)
+```
+
 **Basically Unstoppable Saboteur Terrierizing Every Representation**
 
 Buster is a chaos filter for H.E.A.R.T. servers. It sits in front of a server's
@@ -139,18 +152,31 @@ nothing proved it right or wrong.
 
 ## The first plugin pack
 
-Each mutation, and what ARTIE must do about it:
+The pack is the scripts in `plugins/`. Each one, what it does, and how Buster
+judges the client from its next requests:
 
-| Mutation | What ARTIE must do | Spec |
-| - | - | - |
-| Change a Layer 1 ETag | Get 412 on the next act, discard the act, re-sync. Never resubmit it. | §6.2, §6.3 |
-| Drop an affordance from the manifest | Never act on it | §6.2 |
-| Flip a byte in an affordance set or schema | Refuse it, never cache it | §6.5 |
-| Strip `integrity` from the forms link | Refuse to follow the link | §6.5 |
-| Lie in `Preference-Applied` | Take the rung from the header, and fail safe | §6.11.1 |
-| Remove the `hr` CURIE prefix | Treat `hr:forms` as an unknown relation | §6.1, §7.5 |
-| Reshuffle or alias hrefs | Keep working, since the client never reads meaning from a URL | §6.5 |
-| Relax Layer 1 `Cache-Control` | Still revalidate Layer 1 before every act | §6.3 |
+| Plugin | Mutation | Passes when the client | Fails when the client | Spec |
+| - | - | - | - | - |
+| `stale-etag` | Forges the Layer 1 ETag | revalidates before acting, or gets 412 and re-syncs | resubmits the act with the stale ETag | §6.2, §6.3 |
+| `drop-affordance` | Drops one embedded affordance from an L0 manifest | never acts on it | acts on its method and target | §6.2 |
+| `flip-byte` | Changes one letter inside a JSON string in an affordance set or schema | refetches the same URL before acting | acts before refetching | §6.5 |
+| `strip-forms-integrity` | Removes `integrity` from the forms link | never follows the link | follows it | §6.5 |
+| `lie-preference-applied` | Removes `Preference-Applied` from an L1 or L2 response | treats it as L0 with no affordances | follows the forms link, or acts | §6.11.1, §6.4 |
+| `drop-curie` | Removes `_links.curies`, so `hr:forms` no longer expands | never follows `hr:forms` | follows it | §6.1, §7.5 |
+| `alias-forms-href` | Adds a query the server did not write to the forms link | follows the link as given | requests the bare path, building the URL itself | §6.5 |
+| `relax-layer1-cache` | Sets Layer 1 to `private, max-age=3600` | revalidates Layer 1 before its next act | acts without revalidating | §6.3 |
+
+A window that ends with no proof either way is `inconclusive`.
+
+Some judgements are approximations, and the scripts say so:
+
+- "Never cache it" cannot be seen from requests. `flip-byte` judges the
+  observable part: the client fetched those bytes because it needed them, so
+  acting before it refetches means it used the corrupted copy.
+- `relax-layer1-cache` and `lie-preference-applied` count an act as "on this
+  resource" when its path starts with the resource's path.
+- `alias-forms-href` relies on the server ignoring query parameters it does
+  not know, so the aliased URL serves the same bytes.
 
 RISE is out of scope while it is on hold.
 
@@ -201,6 +227,6 @@ git config core.hooksPath .githooks
 | Engine, `no-store` rule, seeded selection, mutation log | Built |
 | Kotlin DSL and `*.buster.kts` script host (compile cache, reload, error reporting) | Built |
 | Verifier (expectations and verdicts) | Built |
-| First plugin pack | 4 of 8: `strip-forms-integrity`, `drop-curie`, `stale-etag`, `relax-layer1-cache` |
+| First plugin pack | Built: all 8 |
 | Folder watching (reload on change) | Planned; `PluginHost.reload()` exists |
 | Spring WebFlux filter, profile switch, report endpoint | Planned |

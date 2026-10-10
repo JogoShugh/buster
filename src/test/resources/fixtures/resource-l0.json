@@ -1,0 +1,11 @@
+{
+  "name": "North bed",
+  "_links": { "self": { "href": "/beds/1" } },
+  "_forms": {
+    "rename": {
+      "_links": { "target": { "href": "/beds/{id}/name" } },
+      "method": "PUT",
+      "schema": { "type": "object", "properties": { "name": { "type": "string" } } }
+    }
+  }
+}

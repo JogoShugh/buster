@@ -49,16 +49,28 @@ class VerifierSteps(private val world: World) {
     @When("a Layer 1 response for {string} goes out to client {string} using only that plugin")
     fun goesOut(path: String, client: String) = world.layerOneGoesOut(path, client)
 
-    /** Requests are "METHOD /path", comma-separated; "with the mutated ETag" adds If-Match. */
+    /**
+     * Requests are "METHOD /path", comma-separated. "with the mutated ETag" adds If-Match;
+     * "GET the forms link" follows the forms link in the response as it went out.
+     */
     @When("client {string} sends {}")
     fun sends(client: String, requests: String) {
         if (requests == "nothing") return
         requests.split(",").map { it.trim() }.forEach { request ->
-            val (method, path) = request.split(" ")
+            val (method, target) = request.split(" ")
+            val href = if (request == "GET the forms link") formsHref() else target
             val headers = Headers()
             if (request.endsWith("with the mutated ETag")) headers["If-Match"] = world.response.headers["ETag"]!!
-            world.engine.request(BusterRequest(method, path, headers = headers, clientId = client))
+            val req = BusterRequest(
+                method, href.substringBefore('?'), href.substringAfter('?', "").ifEmpty { null }, headers, client,
+            )
+            world.engine.request(req)
         }
+    }
+
+    private fun formsHref(): String {
+        val doc = checkNotNull(Hal.parseObject(world.response.body))
+        return checkNotNull(Hal.link(doc, Hal.FORMS_REL)).path("href").asText()
     }
 
     @When("the run ends")
