@@ -98,6 +98,21 @@ class CampaignSteps(private val world: World) {
         assertFalse(combinations().any { it.plugin == plugin && it.label == client }) { "plan: ${combinations()}" }
     }
 
+    @Then("no round arms more than one of {string}")
+    fun noRoundArmsTwo(clients: String) {
+        val labels = clients.split(",").map { it.trim() }.toSet()
+        checkNotNull(plan).rounds.forEachIndexed { i, round ->
+            val armed = round.map { it.label }.filter { it in labels }
+            assertTrue(armed.size <= 1) { "round ${i + 1} arms $armed" }
+        }
+    }
+
+    @Then("each of {string} is armed in some round")
+    fun eachArmed(clients: String) {
+        val armed = combinations().map { it.label }.toSet()
+        clients.split(",").map { it.trim() }.forEach { assertTrue(it in armed) { "never armed: $it" } }
+    }
+
     @Then("the plan has {int} rounds")
     fun roundCount(count: Int) = assertEquals(count, checkNotNull(plan).rounds.size)
 
@@ -137,6 +152,10 @@ class CampaignSteps(private val world: World) {
         extra.forEach { (name, value) -> headers[name] = value }
         val request = BusterRequest(method, path, null, headers, client)
         val response = respond(kind)
+        // A server that follows RFC 9110 §8.7 names the resource: the bed, for an act on its name.
+        if (kind.endsWith("Layer 1")) {
+            response.headers["Content-Location"] = if (request.isGet) path else path.substringBeforeLast('/')
+        }
         world.original = response.copy()
         world.response = response
         world.engine.request(request)

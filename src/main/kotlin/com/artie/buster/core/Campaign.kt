@@ -70,7 +70,10 @@ class Campaign(
 
     /** Each client's requests in the current run, in order. */
     private val live = HashMap<String, MutableList<BusterRequest>>()
+    private val liveTicks = HashMap<String, MutableList<Long>>()
+    private var tick = 0L
     private var dryRun = emptyMap<String, List<BusterRequest>>()
+    private var dryTicks = emptyMap<String, List<Long>>()
     private val recorded = mutableListOf<RecordedExchange>()
 
     /** The plan worked out from the last dry run, if any. */
@@ -82,6 +85,7 @@ class Campaign(
     @Synchronized
     fun startRecording() {
         live.clear()
+        liveTicks.clear()
         recorded.clear()
         lastPlan = null
         armed = emptyMap()
@@ -93,7 +97,9 @@ class Campaign(
     /** Counts a request, so its position among its client's requests is known when it is answered. */
     @Synchronized
     fun observe(req: BusterRequest) {
-        if (!ignored(req)) live.getOrPut(req.label) { mutableListOf() } += req
+        if (ignored(req)) return
+        live.getOrPut(req.label) { mutableListOf() } += req
+        liveTicks.getOrPut(req.label) { mutableListOf() } += tick++
     }
 
     @Synchronized
@@ -125,9 +131,10 @@ class Campaign(
     fun plan(): Plan {
         if (mode == Mode.RECORDING) {
             dryRun = live.mapValues { it.value.toList() }
+            dryTicks = liveTicks.mapValues { it.value.toList() }
             mode = Mode.OFF
         }
-        return Planner(plugins, seed, dryRun).plan(recorded).also { lastPlan = it }
+        return Planner(plugins, seed, dryRun, dryTicks).plan(recorded).also { lastPlan = it }
     }
 
     /**
@@ -143,6 +150,7 @@ class Campaign(
         verifier.windowless = true
         armed = chosen.associateBy { it.label to it.index }
         live.clear()
+        liveTicks.clear()
         round = number
         mode = Mode.ARMED
         return chosen.size
@@ -155,6 +163,7 @@ class Campaign(
         verifier.windowless = false
         armed = emptyMap()
         live.clear()
+        liveTicks.clear()
         round = 0
         mode = Mode.OFF
     }
@@ -175,7 +184,16 @@ internal class Planner(
     private val plugins: List<Plugin>,
     private val seed: Long,
     private val dryRun: Map<String, List<BusterRequest>>,
+    private val ticks: Map<String, List<Long>>,
 ) {
+    /** What one client did in the dry run: when it was active, what it touched, and what it wrote. */
+    private class Footprint(val first: Long, val last: Long, val touched: Set<String>, val written: Set<String>) {
+        /** Overlap in time, and a common resource that at least one of the two wrote. */
+        fun interactsWith(other: Footprint): Boolean =
+            first <= other.last && other.first <= last &&
+                touched.intersect(other.touched).any { it in written || it in other.written }
+    }
+
     private sealed class Attempt {
         class Applies(val detail: String) : Attempt()
         class Skips(val reason: String) : Attempt()
@@ -193,9 +211,7 @@ internal class Planner(
                 }
             }
         }
-        val byLabel = combos.groupBy { it.label }.values
-        val width = byLabel.maxOfOrNull { it.size } ?: 0
-        val rounds = (0 until width).map { k -> byLabel.mapNotNull { it.getOrNull(k) } }
+        val rounds = rounds(combos, footprints(recorded))
         val coverage = plugins.associate { p -> p.name to combos.count { it.plugin == p.name } }
         return Plan(rounds, coverage, skipped)
     }
@@ -210,5 +226,43 @@ internal class Planner(
         } catch (skip: SkipMutation) {
             Attempt.Skips(skip.reason)
         }
+    }
+
+    /** One footprint per client: the resources its exchanges are the state of, and the paths it asked for. */
+    private fun footprints(recorded: List<RecordedExchange>): Map<String, Footprint> =
+        dryRun.mapValues { (label, asked) ->
+            val seen = recorded.filter { it.label == label }
+            val states = seen.map { Resource.pathOf(it.request, it.response) }
+            val written = seen.filter { it.request.isAct }.map { Resource.pathOf(it.request, it.response) }
+            val stamps = ticks[label].orEmpty()
+            Footprint(
+                first = stamps.minOrNull() ?: 0L,
+                last = stamps.maxOrNull() ?: 0L,
+                touched = (asked.map { it.path } + states).toSet(),
+                written = (asked.filter { it.isAct }.map { it.path } + written).toSet(),
+            )
+        }
+
+    /**
+     * Round k holds the k-th combination of each group of clients. A group is clients that
+     * interact in the dry run, so only one of them is armed at a time; a client alone in its
+     * group is a group of one, which is the plain case.
+     */
+    private fun rounds(combos: List<Combination>, footprints: Map<String, Footprint>): List<List<Combination>> {
+        val labels = combos.map { it.label }.distinct()
+        val parent = labels.associateWith { it }.toMutableMap()
+        fun root(label: String): String = if (parent.getValue(label) == label) label else root(parent.getValue(label))
+        for (a in labels.indices) {
+            for (b in a + 1 until labels.size) {
+                val fa = footprints[labels[a]]
+                val fb = footprints[labels[b]]
+                if (fa != null && fb != null && fa.interactsWith(fb)) parent[root(labels[b])] = root(labels[a])
+            }
+        }
+        val sequences = labels.groupBy { root(it) }.values.map { group ->
+            group.flatMap { label -> combos.filter { it.label == label } }
+        }
+        val width = sequences.maxOfOrNull { it.size } ?: 0
+        return (0 until width).map { k -> sequences.mapNotNull { it.getOrNull(k) } }
     }
 }

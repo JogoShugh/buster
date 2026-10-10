@@ -75,6 +75,42 @@ Feature: A campaign aims every mutation where the client will exercise the rule
     And round 1 arms one combination each for "alice, bob"
     And round 2 arms one combination each for "alice"
 
+  # Two clients of one scenario act on the same bed at the same time. Mutate both and the
+  # first to act with the forged ETag gets its 412 and re-syncs, which ends the scenario
+  # before the other ever acts: one verdict is real and the other is an artefact. So clients
+  # that interact in the dry run are never armed in the same round. Which clients those are
+  # comes from the dry run (they overlap in time and touch a common resource, with at least
+  # one write), not from anything in their names.
+  Scenario: Clients that interact in the dry run are not armed in the same round
+    Given a campaign over the plugin pack
+    And the campaign starts recording
+    And client "ARTIE/0.5 (writes-first; first)" requests GET "/beds/1" and gets an L1 Layer 1
+    And client "ARTIE/0.5 (writes-first; second)" requests GET "/beds/1" and gets an L1 Layer 1
+    And client "ARTIE/0.5 (writes-first; first)" requests PUT "/beds/1/name" with the original ETag and gets an L1 Layer 1
+    And client "ARTIE/0.5 (writes-first; second)" requests PUT "/beds/1/name" with the original ETag and gets an L1 Layer 1
+    When the campaign is planned
+    Then no round arms more than one of "ARTIE/0.5 (writes-first; first), ARTIE/0.5 (writes-first; second)"
+    And each of "ARTIE/0.5 (writes-first; first), ARTIE/0.5 (writes-first; second)" is armed in some round
+
+  Scenario: Clients that overlap but touch different beds are armed together
+    Given a campaign over the plugin pack
+    And the campaign starts recording
+    And client "ARTIE/0.5 (apart; first)" requests GET "/beds/1" and gets an L1 Layer 1
+    And client "ARTIE/0.5 (apart; second)" requests GET "/beds/2" and gets an L1 Layer 1
+    And client "ARTIE/0.5 (apart; first)" requests PUT "/beds/1/name" with the original ETag and gets an L1 Layer 1
+    And client "ARTIE/0.5 (apart; second)" requests PUT "/beds/2/name" with the original ETag and gets an L1 Layer 1
+    When the campaign is planned
+    Then round 1 arms one combination each for "ARTIE/0.5 (apart; first), ARTIE/0.5 (apart; second)"
+
+  Scenario: Clients that overlap and only read have nothing to conflict over
+    Given a campaign over the plugin pack
+    And the campaign starts recording
+    And client "ARTIE/0.5 (readers; first)" requests GET "/beds/1" and gets an L1 Layer 1
+    And client "ARTIE/0.5 (readers; second)" requests GET "/beds/1" and gets an L1 Layer 1
+    And client "ARTIE/0.5 (readers; first)" requests GET "/beds/1" and gets an L1 Layer 1
+    When the campaign is planned
+    Then round 1 arms one combination each for "ARTIE/0.5 (readers; first), ARTIE/0.5 (readers; second)"
+
   Scenario: Arming a round mutates only the exchanges it names
     Given a recorded dry run of alice and bob over the plugin pack
     When round 1 is armed
