@@ -190,6 +190,36 @@ Buster is for development only, with scripts you trust:
 - The core package imports no server framework. An architecture test enforces
   this, so the same engine can sit behind any HTTP adapter.
 
+## Running Buster in a Spring WebFlux server
+
+Buster ships a `WebFilter` and a Spring Boot auto-configuration. The filter
+runs at `Ordered.HIGHEST_PRECEDENCE`, so no endpoint can opt out. It buffers
+each response body, hands it to the engine, and writes the result back with a
+correct `Content-Length`.
+
+The `buster` profile is the one switch: without it none of Buster's beans
+exist. Spring is `compileOnly`, so Buster uses the host server's Spring.
+
+In ARTIE's `server-spring`, Buster comes in through a composite build when
+`../buster` is checked out, as a `developmentOnly` dependency. Spring Boot
+leaves `developmentOnly` out of the boot jar, so a production build carries
+no Buster code at all.
+
+```
+cd ../server-spring
+SPRING_PROFILES_ACTIVE=buster BUSTER_SEED=42 ./gradlew bootRun
+```
+
+| Property | Meaning | Default |
+| - | - | - |
+| `buster.plugins` | The folder of `*.buster.kts` scripts | `plugins` (`../buster/plugins` in server-spring) |
+| `buster.seed` | The run's seed. Unset means a random one, logged for replay. | random |
+| `buster.log` | A file for the JSON Lines log | in memory only |
+| `buster.client-header` | The header that names the client, so expectations are judged per client | `X-Buster-Client` |
+
+`GET /_buster/report` returns the seed and the verdicts so far.
+`GET /_buster/report?flush=true` ends the run first, closing open windows.
+
 ## Layout
 
 ```
@@ -197,6 +227,7 @@ src/main/kotlin/com/artie/buster/
   core/     exchange model, classifier, engine, verifier, mutation log
   dsl/      the Kotlin DSL that plugin scripts call
   script/   the *.buster.kts script host
+  spring/   the WebFlux filter and the profile-gated auto-configuration
 plugins/    the plugin pack, one script per mutation
 ```
 
@@ -229,4 +260,4 @@ git config core.hooksPath .githooks
 | Verifier (expectations and verdicts) | Built |
 | First plugin pack | Built: all 8 |
 | Folder watching (reload on change) | Planned; `PluginHost.reload()` exists |
-| Spring WebFlux filter, profile switch, report endpoint | Planned |
+| Spring WebFlux filter, profile switch, report endpoint | Built |

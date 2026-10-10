@@ -74,6 +74,9 @@ configurations.matching { it.name == "detekt" }.all {
 val logBddRun by tasks.registering {
     group = "verification"
     description = "Appends a BDD_RUN fact to .claude/tdd-events.log for the pre-commit TDD-ordering check."
+    // Only a build that runs this project's tests is a BDD run. A host server compiling
+    // Buster through its composite build must not log the last run's result again.
+    onlyIf { gradle.taskGraph.hasTask(tasks.test.get()) }
     doLast {
         val resultFile = file("build/test-results/test/TEST-com.artie.buster.bdd.RunCucumberTest.xml")
         val logFile = file(".claude/tdd-events.log")
