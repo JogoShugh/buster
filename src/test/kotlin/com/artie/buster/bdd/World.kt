@@ -37,6 +37,16 @@ class World {
     fun immutableGoesOut(path: String, client: String, contentType: String, body: String) =
         goesOut(path, client, BusterResponse(200, headers(contentType, IMMUTABLE), body.toByteArray()))
 
+    /** A plain JSON 200 from an ordinary API: no ETag, nothing H.E.A.R.T. about it. */
+    fun plainJsonGoesOut(path: String, client: String) =
+        goesOut(path, client, BusterResponse(200, headers("application/json", "no-cache"), TODO.toByteArray()))
+
+    /** An RFC 9457 problem response. */
+    fun problemGoesOut(path: String, client: String) {
+        val headers = headers("application/problem+json", "no-cache")
+        goesOut(path, client, BusterResponse(404, headers, PROBLEM.toByteArray()))
+    }
+
     private fun goesOut(path: String, client: String, res: BusterResponse) {
         engine = Engine(plugins, 1, log)
         sendThrough(path, client, res)
@@ -69,6 +79,8 @@ class World {
         /** The span of every request a scenario sends out; an event about "that response" names it. */
         const val SPAN = "00f067aa0ba902b7"
         private const val BED = """{"name":"North bed"}"""
+        private const val TODO = """{"id":1,"title":"Walk Buster","done":false}"""
+        private const val PROBLEM = """{"status":404,"title":"Not Found"}"""
         private const val IMMUTABLE = "public, max-age=31536000, immutable"
     }
 }

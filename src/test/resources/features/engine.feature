@@ -28,11 +28,19 @@ Feature: The engine picks a mutation, applies it, and makes the result cache-saf
       | leaving the body alone                | private, max-age=3600 |
       | and sets the body field "name" to "x" | no-store              |
 
-  Scenario: A response Buster cannot place is never touched
+  Scenario: A response the classifier cannot place is left to plugins that name OTHER
     Given a plugin "rename-bed" on RESOURCE that sets the body field "name" to "Chewed"
     When a 404 problem response for "/beds/9" goes out
     Then the response is unchanged
     And the log has no mutations
+
+  # Buster is not specific to H.E.A.R.T. The classifier places H.E.A.R.T. responses;
+  # everything else is OTHER, and a plugin for any other kind of server names OTHER.
+  Scenario: A plugin that names OTHER can mutate a response from any server
+    Given a plugin "chew-anything" on OTHER that sets the body field "title" to "Chewed"
+    When a 404 problem response for "/beds/9" goes out
+    Then the body field "title" is "Chewed"
+    And Cache-Control is "no-store"
 
   Scenario: A plugin only sees the layers it names
     Given a plugin "chew-set" on AFFORDANCE_SET that sets the body field "name" to "Chewed"

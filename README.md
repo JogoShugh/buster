@@ -41,14 +41,26 @@
 
 **Basically Unstoppable Saboteur Terrierizing Every Representation**
 
-Buster is a chaos filter for H.E.A.R.T. servers. It sits in front of a server's
-responses and tampers with them on purpose. Its job is to prove that ARTIE,
-the reference client, follows the 0.5 spec when the server misbehaves. It is
-named after a Russell terrier who chews remotes, bites ankles, and jumps on
-everything.
+Buster is a chaos filter for HTTP servers. It sits in front of a server's
+responses and tampers with them on purpose, then watches what the client does
+next. Each plugin is both an attack and a test: it breaks a response one way,
+and it says what a well-behaved client must do about it. It is named after a
+Russell terrier who chews remotes, bites ankles, and jumps on everything.
 
-Success means two things. Every mutation ends in the failure path the spec
-names for it. Nothing corrupted is ever cached.
+Buster itself knows nothing about any one API. What it attacks is decided by
+the plugins you load:
+
+- **`plugins/`: the H.E.A.R.T. pack.** Buster was built to prove that ARTIE,
+  the H.E.A.R.T. reference client, follows the 0.5 spec when the server
+  misbehaves. These eight plugins each break one spec rule. For them, success
+  means two things: every mutation ends in the failure path the spec names
+  for it, and nothing corrupted is ever cached.
+- **`samples/`: plugins for ordinary servers.** `flaky-503` turns a plain JSON
+  API's successful responses into `503 Service Unavailable`, and checks that
+  the client retries (see [A sample for any JSON API](#a-sample-for-any-json-api)).
+
+Point `buster.plugins` at whichever folder fits the server under test, or at a
+folder of your own.
 
 ## How Buster tampers with a server
 
@@ -62,11 +74,13 @@ For every exchange, Buster does this:
    step 6).
 2. **Let the server answer.** The real server handles the request as usual.
 3. **Classify the response.** Buster decides what the response is from what a
-   client can see: status, headers and body. It finds the layer (Layer 1
-   resource, Layer 2 affordance set, Layer 3 schema), the rung (L0, L1, L2)
-   and the dialect (HAL Schema Forms or HAL-FORMS). It takes the rung from
-   `Preference-Applied`, never from what the client asked for. Anything it
-   cannot place is `OTHER`, and Buster never touches `OTHER`.
+   client can see: status, headers and body. The built-in classifier knows
+   H.E.A.R.T.: it finds the layer (Layer 1 resource, Layer 2 affordance set,
+   Layer 3 schema), the rung (L0, L1, L2) and the dialect (HAL Schema Forms or
+   HAL-FORMS), taking the rung from `Preference-Applied`, never from what the
+   client asked for. Anything it cannot place is `OTHER`: every response of a
+   server that is not H.E.A.R.T., and error responses. Only plugins that name
+   `OTHER` touch those.
 4. **Pick a mutation.** From the plugins that apply to that layer and rung,
    Buster picks one, weighted by each plugin's `weight`. The choice comes from
    a random source seeded with the run's seed and the exchange's sequence
@@ -75,12 +89,13 @@ For every exchange, Buster does this:
 5. **Mutate, then make it cache-safe.** The plugin changes the status,
    headers or body. Then the engine sets `Cache-Control: no-store`, whatever
    the plugin wrote. Otherwise a shared cache, such as the one in the
-   two-client L3 demo, could keep corrupted bytes under an immutable URL for
-   a year. ARTIE checks integrity; an intermediate cache does not. A plugin
+   H.E.A.R.T. two-client L3 demo, could keep corrupted bytes under an
+   immutable URL for a year. A client may check what it receives; an
+   intermediate cache does not. A plugin
    may keep its own `Cache-Control` only by calling `keepCacheControl()`, and
    only if the body bytes are unchanged. The engine checks the bytes, so a
    plugin author cannot get this wrong.
-6. **Expect a reaction.** Each mutation declares what ARTIE must do about it.
+6. **Expect a reaction.** Each mutation declares what the client must do about it.
    Buster judges that from the next requests the same client sends. One may
    prove the client right, one may prove it wrong, or the window may run out.
    So every plugin is also a conformance test.
@@ -94,7 +109,8 @@ client ◀─response── [ classify ▶ pick ▶ mutate ▶ no-store ▶ expe
 
 ## Plugins are Kotlin scripts
 
-A plugin is a Kotlin script named `*.buster.kts` in the plugins folder. There
+A plugin is a Kotlin script named `*.buster.kts` in the plugins folder
+(`buster.plugins`). There
 is no build step and no jar. Buster compiles each script at startup with the
 Kotlin scripting host. The Buster DSL is the script's implicit receiver, so a
 script calls `plugin(...)` directly.
@@ -146,8 +162,8 @@ Inside `plugin { ... }`:
 
 | Call | Meaning |
 | - | - |
-| `spec("§6.2", ...)` | The spec sections the plugin attacks. Logged with each mutation. |
-| `on(Layer.RESOURCE, ...)` | The layers it applies to. Required. |
+| `spec("§6.2", ...)` | The spec sections or RFCs the plugin attacks. Logged with each mutation. |
+| `on(Layer.RESOURCE, ...)` | The layers it applies to. Required. `Layer.OTHER` is any response that is not H.E.A.R.T. |
 | `rungs(Rung.L1, ...)` | The rungs it applies to. Default: every rung. |
 | `weight(n)` | Relative chance of being picked. Default 1. |
 | `mutate { ... }` | What the plugin does to a response. Required. |
@@ -176,7 +192,53 @@ When a run ends before a window fills, the expectation is closed. If the
 client sent no request at all in that time, the verdict is `inconclusive`:
 nothing proved it right or wrong.
 
-## The first plugin pack
+## A sample for any JSON API
+
+Nothing about Buster needs H.E.A.R.T. This sample, in `samples/`, plays an
+overloaded server in front of an ordinary JSON API:
+
+```kotlin
+// samples/flaky-503.buster.kts
+plugin("flaky-503") {
+    spec("RFC 9110 §15.6.4")
+    on(Layer.OTHER)
+
+    mutate {
+        if (response.status !in 200..299) skip("only a success can turn flaky")
+        if ("json" !in response.headers["Content-Type"].orEmpty()) skip("not JSON")
+        val method = request.method
+        val path = request.path
+        response.status = 503
+        response.headers["Content-Type"] = "application/problem+json"
+        response.headers["Retry-After"] = "1"
+        response.body = """{"status":503,"title":"Service Unavailable"}""".toByteArray()
+        detail("$method $path answered 503, Retry-After 1")
+
+        expect("retry $path rather than change it unread", window = 3) {
+            onRequest { req ->
+                when {
+                    req.method == method && req.path == path -> pass("retried $method $path")
+                    req.isAct && req.path == path -> fail("${req.method} $path without reading it first")
+                    else -> pending()
+                }
+            }
+            onExpire { inconclusive("never retried $path") }
+        }
+    }
+}
+```
+
+| A client that | Verdict |
+| - | - |
+| retries the same request | pass |
+| changes the resource it never managed to read, such as `DELETE /todos/1` | FAIL |
+| moves on to something else | inconclusive |
+
+Run it with `buster.plugins=samples`. A plain JSON API without ETags is all
+`OTHER` to the classifier, so this plugin can reach every successful JSON
+response.
+
+## The H.E.A.R.T. pack
 
 The pack is the scripts in `plugins/`. Each one, what it does, and how Buster
 judges the client from its next requests:
@@ -301,11 +363,12 @@ verdicts so far as JSON. `?flush=true` ends the run first. A request with
 
 ```
 src/main/kotlin/com/artie/buster/
-  core/     exchange model, classifier, engine, verifier, mutation log
+  core/     exchange model, H.E.A.R.T. classifier, engine, verifier, mutation log
   dsl/      the Kotlin DSL that plugin scripts call
   script/   the *.buster.kts script host
   spring/   the WebFlux filter and the profile-gated auto-configuration
-plugins/    the plugin pack, one script per mutation
+plugins/    the H.E.A.R.T. pack, one script per mutation
+samples/    plugins for ordinary servers, such as flaky-503
 ```
 
 ## Building and the gates
@@ -335,6 +398,7 @@ git config core.hooksPath .githooks
 | Engine, `no-store` rule, seeded selection, mutation log | Built |
 | Kotlin DSL and `*.buster.kts` script host (compile cache, reload, error reporting) | Built |
 | Verifier (expectations and verdicts) | Built |
-| First plugin pack | Built: all 8 |
+| H.E.A.R.T. pack | Built: all 8 |
+| Sample for any JSON API (`flaky-503`) | Built |
 | Folder watching (reload on change) | Planned; `PluginHost.reload()` exists |
 | Spring WebFlux filter, profile switch, report endpoint | Built |

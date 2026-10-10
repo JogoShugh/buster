@@ -2,7 +2,7 @@ Feature: Buster classifies a response the way a client would
   Buster decides which H.E.A.R.T. layer and rung a response is before it picks
   a mutation. It reads only what a client can see: status, headers and body.
   It trusts Preference-Applied, not what the client asked for (SPEC §6.4, §6.11.1).
-  Anything it cannot place is OTHER, and Buster leaves OTHER untouched.
+  Anything it cannot place is OTHER; only plugins that name OTHER touch it.
 
   Scenario Outline: <case>
     Given a response with status <status> and Content-Type "<content type>"

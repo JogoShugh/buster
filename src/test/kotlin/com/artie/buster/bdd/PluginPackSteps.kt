@@ -36,6 +36,34 @@ class PluginPackSteps(private val world: World) {
         assertEquals(1, world.plugins.size) { "no plugin $name in the pack" }
     }
 
+    @Given("only the {string} plugin from the samples")
+    fun onlySample(name: String) {
+        val loaded = PluginHost(Path.of("samples")).reload()
+        assertEquals(emptyList<Any>(), loaded.failures)
+        world.plugins = loaded.plugins.filter { it.name == name }
+        assertEquals(1, world.plugins.size) { "no plugin $name in the samples" }
+    }
+
+    @Given("a plain JSON response for {string} goes out to client {string}")
+    fun plainJson(path: String, client: String) = world.plainJsonGoesOut(path, client)
+
+    @When("a 404 problem response for {string} goes out to client {string}")
+    fun problem(path: String, client: String) = world.problemGoesOut(path, client)
+
+    @Then("the response went out as {int} with Retry-After {string} and Cache-Control {string}")
+    fun wentOutAs(status: Int, retryAfter: String, cacheControl: String) {
+        assertEquals(status, world.response.status)
+        assertEquals(retryAfter, world.response.headers["Retry-After"])
+        assertEquals(cacheControl, world.response.headers["Cache-Control"])
+    }
+
+    @Then("the response went out unchanged")
+    fun wentOutUnchanged() {
+        assertEquals(world.original.status, world.response.status)
+        assertTrue(world.original.body.contentEquals(world.response.body))
+        assertEquals(world.original.headers.toMap(), world.response.headers.toMap())
+    }
+
     @Given("an L1 Layer 1 response goes out to client {string}")
     fun l1GoesOut(client: String) = world.layerOneGoesOut("/beds/1", client, "forms=link", fixture("resource"))
 

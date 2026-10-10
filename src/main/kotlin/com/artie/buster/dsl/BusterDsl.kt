@@ -34,7 +34,7 @@ class PluginBuilder(private val name: String) {
         spec += sections
     }
 
-    /** The layers the plugin applies to. */
+    /** The layers the plugin applies to. OTHER is every response the H.E.A.R.T. classifier cannot place. */
     fun on(vararg layers: Layer) {
         this.layers += layers
     }
@@ -55,7 +55,6 @@ class PluginBuilder(private val name: String) {
 
     internal fun build(): Plugin {
         require(layers.isNotEmpty()) { "plugin $name: on(...) names no layer" }
-        require(Layer.OTHER !in layers) { "plugin $name: Buster never touches OTHER" }
         require(rungs.isNotEmpty()) { "plugin $name: rungs(...) names no rung" }
         require(weight >= 1) { "plugin $name: weight must be at least 1" }
         val block = requireNotNull(mutate) { "plugin $name: no mutate { } block" }

@@ -37,7 +37,7 @@ class Engine(
     fun respond(req: BusterRequest, res: BusterResponse): MutationRecord? {
         val classification = Classifier.classify(res)
         val candidates = plugins.filter { it.appliesTo(classification) }
-        if (classification.layer == Layer.OTHER || candidates.isEmpty()) return null
+        if (candidates.isEmpty()) return null
         val n = seq.incrementAndGet()
         // One random source per exchange: replay needs only the seed and the sequence number.
         val random = Random(seed xor (n * MIX))

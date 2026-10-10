@@ -2,7 +2,8 @@
   "stack": "gradle-kotlin",
   "prodPatterns": [
     "src/main/kotlin/*.kt",
-    "plugins/*.buster.kts"
+    "plugins/*.buster.kts",
+    "samples/*.buster.kts"
   ],
   "prodExcludePatterns": [],
   "featurePatterns": [

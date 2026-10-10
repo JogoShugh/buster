@@ -1,6 +1,9 @@
 package com.artie.buster.core
 
-/** Which H.E.A.R.T. layer a response is (SPEC §6.1). Buster leaves OTHER untouched. */
+/**
+ * Which H.E.A.R.T. layer a response is (SPEC §6.1). OTHER is everything else, from any
+ * server; only plugins that name OTHER touch it.
+ */
 enum class Layer { RESOURCE, AFFORDANCE_SET, SCHEMA, OTHER }
 
 /** Rendering rung of a response (SPEC §6.10). L3 to L6 are properties, not renderings. */
