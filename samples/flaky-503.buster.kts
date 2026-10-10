@@ -14,6 +14,10 @@ plugin("flaky-503") {
         if ("json" !in response.headers["Content-Type"].orEmpty()) skip("not JSON")
         val method = request.method
         val path = request.path
+        // Silence is a FAIL here, so only where the dry run shows the client going on to use this
+        // resource: there is then something it must not do after a 503.
+        val seen = future ?: skip("no dry run, so silence would be a guess")
+        if (seen.none { it.path == path }) skip("the client never goes on to use $path in its dry run")
         response.status = 503
         response.headers["Content-Type"] = "application/problem+json"
         response.headers["Retry-After"] = "1"
@@ -28,7 +32,7 @@ plugin("flaky-503") {
                     else -> pending()
                 }
             }
-            onExpire { inconclusive("never retried $path") }
+            onExpire { fail("never retried $path") }
         }
     }
 }

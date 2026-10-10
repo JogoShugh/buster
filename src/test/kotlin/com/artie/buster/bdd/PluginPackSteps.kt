@@ -1,7 +1,9 @@
 package com.artie.buster.bdd
 
+import com.artie.buster.core.BusterRequest
 import com.artie.buster.core.Forms
 import com.artie.buster.core.Hal
+import com.artie.buster.core.Headers
 import com.artie.buster.script.LoadReport
 import com.artie.buster.script.PluginHost
 import io.cucumber.java.en.Given
@@ -62,6 +64,18 @@ class PluginPackSteps(private val world: World) {
         assertEquals(world.original.status, world.response.status)
         assertTrue(world.original.body.contentEquals(world.response.body))
         assertEquals(world.original.headers.toMap(), world.response.headers.toMap())
+    }
+
+    /** "GET the forms link", "PUT /beds/1/name with the original ETag", comma-separated. */
+    @Given("the dry run of that client sends {}")
+    fun dryRun(requests: String) {
+        world.dryRun = requests.split(",").map { it.trim() }.map { text ->
+            val withEtag = text.endsWith(" with the original ETag")
+            val (method, target) = text.removeSuffix(" with the original ETag").split(" ", limit = 2)
+            val path = if (target == "the forms link") FORMS_HREF else target
+            val headers = Headers().also { if (withEtag) it["If-Match"] = "\"s1\"" }
+            BusterRequest(method, path, null, headers, "that client")
+        }
     }
 
     @Given("an L1 Layer 1 response goes out to client {string}")
@@ -134,4 +148,9 @@ class PluginPackSteps(private val world: World) {
     private fun fixture(name: String) = checkNotNull(javaClass.getResource("/fixtures/$name.json")).readText()
 
     private fun pack(): LoadReport = PluginHost(Path.of("plugins")).reload()
+
+    private companion object {
+        /** The forms link of the resource fixture. */
+        const val FORMS_HREF = "/forms/sha256-abc"
+    }
 }

@@ -10,6 +10,8 @@ plugin("drop-curie") {
         val key = Hal.linkKey(doc, Hal.FORMS_REL) ?: skip("no forms link")
         if (!key.contains(':') || key.contains("://")) skip("forms link is not a CURIE")
         val href = Hal.link(doc, Hal.FORMS_REL)?.path("href")?.asText() ?: skip("forms link has no href")
+        // Only where the client follows the link, so there is something to refuse.
+        future?.let { seen -> if (seen.none { it.isGet && it.path == href }) skip("the client never follows $href") }
         val links = Hal.links(doc) ?: skip("no _links")
         links.remove("curies")
         writeJson(doc)

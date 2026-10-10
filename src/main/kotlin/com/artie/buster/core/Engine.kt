@@ -8,15 +8,20 @@ import kotlin.random.Random
  * cache-safe. Buster changes responses only, never stored state.
  */
 class Engine(
-    private val plugins: List<Plugin>,
+    val plugins: List<Plugin>,
     val seed: Long,
     private val log: MutationLog,
     private val verifier: Verifier = Verifier(log),
 ) {
     private val seq = AtomicLong()
+    /** Records a dry run, plans it, and arms a round. Without one the seed chooses. */
+    val campaign = Campaign(plugins, seed, verifier)
 
     /** Every inbound request goes to the verifier before the server sees it. */
-    fun request(req: BusterRequest) = verifier.observe(req)
+    fun request(req: BusterRequest) {
+        campaign.observe(req)
+        verifier.observe(req)
+    }
 
     /** Ends the run: every open expectation gets a verdict now. */
     fun flush() = verifier.flush()
@@ -33,15 +38,48 @@ class Engine(
 
     private val applied = ArrayDeque<MutationRecord>()
 
-    /** Mutates [res] in place. Returns the mutation's record, or null when the response was left alone. */
-    fun respond(req: BusterRequest, res: BusterResponse): MutationRecord? {
+    /**
+     * Mutates [res] in place. Returns the mutation's record, or null when the response was left
+     * alone. [future] is what the client is known to send next, when a caller knows it; with a
+     * campaign running the engine works it out from the dry run itself.
+     */
+    fun respond(req: BusterRequest, res: BusterResponse, future: List<BusterRequest>? = null): MutationRecord? {
         val classification = Classifier.classify(res)
-        val candidates = plugins.filter { it.appliesTo(classification) }
+        return when (campaign.mode) {
+            Campaign.Mode.RECORDING -> {
+                campaign.record(req, res, classification)
+                null
+            }
+            Campaign.Mode.ARMED -> campaign.armedFor(req)?.let { combo ->
+                val plugin = plugins.firstOrNull { it.name == combo.plugin } ?: return null
+                val n = seq.incrementAndGet()
+                val random = Random(seed xor (n * SEED_MIX))
+                val future = campaign.futureOf(combo.label, combo.index)
+                apply(plugin, Exchange(req, res, classification, n), random, future)
+            }
+            Campaign.Mode.OFF -> bySeed(req, res, classification, future)
+        }
+    }
+
+    private fun bySeed(
+        req: BusterRequest,
+        res: BusterResponse,
+        classification: Classification,
+        future: List<BusterRequest>?,
+    ): MutationRecord? {
+        // With a plan, the seed chooses among the combinations the plan allows here, not among
+        // every plugin that fits the response.
+        val planned = campaign.plannedFor(req)
+        val candidates = plugins.filter { p ->
+            p.appliesTo(classification) && (planned == null || planned.any { it.plugin == p.name })
+        }
         if (candidates.isEmpty()) return null
         val n = seq.incrementAndGet()
         // One random source per exchange: replay needs only the seed and the sequence number.
-        val random = Random(seed xor (n * MIX))
-        return apply(pick(candidates, random), Exchange(req, res, classification, n), random)
+        val random = Random(seed xor (n * SEED_MIX))
+        val plugin = pick(candidates, random)
+        val known = if (planned != null) campaign.futureOf(req.label, planned.first().index) else future
+        return apply(plugin, Exchange(req, res, classification, n), random, known)
     }
 
     private class Exchange(
@@ -59,10 +97,10 @@ class Engine(
         }
     }
 
-    private fun apply(plugin: Plugin, ex: Exchange, random: Random): MutationRecord? {
+    private fun apply(plugin: Plugin, ex: Exchange, random: Random, future: List<BusterRequest>?): MutationRecord? {
         // The plugin works on a copy, so a skip leaves the real response exactly as it was.
         val work = ex.res.copy()
-        val scope = MutationScope(ex.req, work, ex.classification, random)
+        val scope = MutationScope(ex.req, work, ex.classification, random, future)
         try {
             plugin.mutate(scope)
         } catch (skip: SkipMutation) {
@@ -93,8 +131,34 @@ class Engine(
 
     private companion object {
         const val MAX_KEPT = 1_000
-
-        /** Spreads consecutive sequence numbers across the seed space. */
-        const val MIX = -0x61c8864680b583ebL
     }
 }
+
+/** The campaign's state, and the gate: it fails on any FAIL, or on a plugin nothing exercised. */
+fun Engine.campaignReport(): CampaignReport {
+    val plan = campaign.lastPlan
+    val verdicts = verdicts()
+    val matrix = verdicts.groupBy { it.record.plugin }.mapValues { (_, byPlugin) ->
+        byPlugin.groupBy { it.record.label }.mapValues { (_, byLabel) -> byLabel.map { it.outcome.label } }
+    }
+    val failures = verdicts.count { it.outcome is Outcome.Fail }
+    val holes = plan?.holes.orEmpty()
+    return CampaignReport(
+        mode = campaign.mode, round = campaign.round, coverage = plan?.coverage.orEmpty(), holes = holes,
+        matrix = matrix, failures = failures, ok = plan != null && failures == 0 && holes.isEmpty(),
+    )
+}
+
+/** What a campaign shows of itself. */
+data class CampaignReport(
+    val mode: Campaign.Mode,
+    val round: Int,
+    /** Combinations the plan holds for each plugin. */
+    val coverage: Map<String, Int>,
+    /** Plugins with none: each is a hole, and needs a live scenario that exercises it. */
+    val holes: List<String>,
+    /** plugin, then client, then every verdict that pair got. */
+    val matrix: Map<String, Map<String, List<String>>>,
+    val failures: Int,
+    val ok: Boolean,
+)

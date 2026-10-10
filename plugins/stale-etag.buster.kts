@@ -7,6 +7,10 @@ plugin("stale-etag") {
 
     mutate {
         val original = response.headers["ETag"] ?: skip("no ETag")
+        // Silence here is a FAIL: the act this ETag was for never came. So the mutation is made
+        // only where the dry run shows this client acting on this ETag.
+        val seen = future ?: skip("no dry run, so silence would be a guess")
+        if (seen.none { it.isAct && it.ifMatch == original }) skip("the client never acts on $original in its dry run")
         val forged = "\"buster-%08x\"".format(random.nextInt())
         response.headers["ETag"] = forged
         val path = request.path
@@ -22,7 +26,9 @@ plugin("stale-etag") {
                     else -> pending()
                 }
             }
-            onExpire { if (acted) fail("did not re-sync after 412") else inconclusive("never acted") }
+            onExpire {
+                if (acted) fail("did not re-sync after 412") else fail("never made the act it made unmutated")
+            }
         }
     }
 }

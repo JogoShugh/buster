@@ -13,6 +13,13 @@ plugin("flip-byte") {
         if (letters.isEmpty()) skip("no letters inside JSON strings")
         // Read the affordances before the flip, so the expectation knows which acts they allow.
         val forms = json()?.let { Forms.embedded(it) }?.elements()?.asSequence()?.toList()
+        // Only where the client acts using this set or schema, so there is an act to hold back.
+        // A schema has no targets of its own: any act of the client's uses it.
+        future?.let { seen ->
+            if (seen.none { it.isAct && (forms == null || forms.any { form -> Forms.actsOn(it, form) }) }) {
+                skip("the client never acts using ${request.path} in its dry run")
+            }
+        }
         val at = letters[random.nextInt(letters.size)]
         val before = response.body[at].toInt().toChar()
         val after = if (before == 'x') 'y' else 'x'
@@ -35,7 +42,7 @@ plugin("flip-byte") {
                     else -> pending()
                 }
             }
-            onExpire { inconclusive("neither refetched $path nor acted") }
+            onExpire { pass("neither refetched $path nor acted from it") }
         }
     }
 }

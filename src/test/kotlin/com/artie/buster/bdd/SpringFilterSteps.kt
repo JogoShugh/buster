@@ -6,6 +6,7 @@ import com.artie.buster.core.Layer
 import com.artie.buster.core.MutationLog
 import com.artie.buster.core.Plugin
 import com.artie.buster.dsl.buster
+import com.artie.buster.script.PluginHost
 import com.artie.buster.spring.BusterAutoConfiguration
 import com.artie.buster.spring.BusterBanner
 import com.artie.buster.spring.BusterWebFilter
@@ -14,6 +15,7 @@ import io.cucumber.java.en.Then
 import io.cucumber.java.en.When
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.springframework.boot.SpringApplication
 import org.springframework.boot.autoconfigure.AutoConfigurations
@@ -29,6 +31,7 @@ import org.springframework.test.web.reactive.server.WebTestClient
 import org.springframework.web.reactive.function.server.RouterFunction
 import org.springframework.web.reactive.function.server.RouterFunctions
 import org.springframework.web.reactive.function.server.ServerResponse
+import java.nio.file.Path
 import java.time.Duration
 
 class SpringFilterSteps {
@@ -242,6 +245,36 @@ class SpringFilterSteps {
 
     @Then("the response status is {int}")
     fun status(code: Int) = assertEquals(code, result.status.value())
+
+    @Given("Buster runs with the plugin pack")
+    fun runsWithPack() = start(PluginHost(Path.of("plugins")).reload().plugins)
+
+    @When("a client POSTs {string}")
+    fun posts(path: String) {
+        result = client.post().uri(path).exchange().expectBody(ByteArray::class.java).returnResult()
+    }
+
+    @Then("the plan JSON arms {string} for client {string}")
+    fun planArms(plugin: String, label: String) {
+        val rounds = checkNotNull(Hal.parseObject(body())).path("rounds")
+        val armed = rounds.any { round ->
+            round.path("combinations").any { it["plugin"].asText() == plugin && it["label"].asText() == label }
+        }
+        assertTrue(armed) { String(body()) }
+    }
+
+    @Then("the report's campaign has a coverage hole for {string}")
+    fun reportHole(plugin: String) {
+        val holes = checkNotNull(Hal.parseObject(body())).path("campaign").path("holes").map { it.asText() }
+        assertTrue(plugin in holes) { String(body()) }
+    }
+
+    @Then("the report's campaign is not ok")
+    fun reportNotOk() {
+        assertFalse(checkNotNull(Hal.parseObject(body())).path("campaign").path("ok").asBoolean(true)) {
+            String(body())
+        }
+    }
 
     @Then("the report shows no FAIL verdict")
     fun noFail() {

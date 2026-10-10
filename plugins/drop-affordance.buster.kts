@@ -11,7 +11,11 @@ plugin("drop-affordance") {
         val forms = Forms.embedded(doc) ?: skip("no embedded affordances")
         val names = forms.fieldNames().asSequence().toList()
         if (names.isEmpty()) skip("no affordances")
-        val name = names[random.nextInt(names.size)]
+        // With a dry run, drop the affordance the client goes on to act on. Without one, any.
+        val name = future?.let { seen ->
+            names.firstOrNull { n -> seen.any { Forms.actsOn(it, forms.get(n)) } }
+                ?: skip("the client never acts on an affordance of ${request.path} in its dry run")
+        } ?: names[random.nextInt(names.size)]
         val dropped = forms.get(name)
         val method = Forms.method(dropped)
         val target = Forms.target(dropped) ?: skip("affordance $name has no target")

@@ -32,6 +32,12 @@ class MutationScope(
     val classification: Classification,
     /** The seeded random source for this exchange. Use only this, so replay works. */
     val random: Random,
+    /**
+     * What this client sent after this request in the dry run, or null when there is no dry run.
+     * A plugin whose silence would be a guess without it skips when it is null; one that attacks
+     * a rule the client never exercises skips when the future shows it never will.
+     */
+    val future: List<BusterRequest>? = null,
 ) {
     internal val details = mutableListOf<String>()
     internal val expectations = mutableListOf<Expectation>()

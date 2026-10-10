@@ -10,6 +10,8 @@ plugin("strip-forms-integrity") {
         val link = Hal.link(doc, Hal.FORMS_REL) ?: skip("no forms link")
         val href = link.path("href").asText()
         link.remove("integrity") ?: skip("forms link already has no integrity")
+        // Only where the client follows the link, so there is something to refuse.
+        future?.let { seen -> if (seen.none { it.isGet && it.path == href }) skip("the client never follows $href") }
         writeJson(doc)
         detail("removed integrity from the forms link $href")
 

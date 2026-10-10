@@ -15,6 +15,9 @@ class World {
     lateinit var original: BusterResponse
     lateinit var response: BusterResponse
 
+    /** What the client's dry run showed it sends after the response goes out; null when unknown. */
+    var dryRun: List<BusterRequest>? = null
+
     /** Sends a Layer 1 response for [path] through a fresh engine holding [plugins]. */
     fun layerOneGoesOut(
         path: String,
@@ -63,7 +66,9 @@ class World {
         original = res.copy()
         response = res
         lastPath = path
-        engine.respond(BusterRequest("GET", path, headers = requestHeaders, clientId = client, spanId = SPAN), response)
+        engine.respond(
+            BusterRequest("GET", path, headers = requestHeaders, clientId = client, spanId = SPAN), response, dryRun,
+        )
         requestHeaders = Headers()
     }
 

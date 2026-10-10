@@ -10,6 +10,7 @@ Feature: The first plugin pack attacks the client rules the spec names
 
   Scenario Outline: <plugin> changes <response>: <change>
     Given only the "<plugin>" plugin from the pack
+    And the dry run of that client sends GET the forms link, PUT /beds/1/name with the original ETag
     And <response> response goes out to client "artie"
     Then <change>
 
@@ -27,6 +28,7 @@ Feature: The first plugin pack attacks the client rules the spec names
 
   Scenario Outline: <plugin>: a client that <behaviour> gets <result>
     Given only the "<plugin>" plugin from the pack
+    And the dry run of that client sends GET the forms link, PUT /beds/1/name with the original ETag
     And <response> response goes out to client "artie"
     When client "artie" sends <requests>
     And the run ends
@@ -41,7 +43,7 @@ Feature: The first plugin pack attacks the client rules the spec names
       | stale-etag             | an L1 Layer 1     | revalidates before acting         | GET /beds/1, PUT /beds/1/name                                                  | pass         |
       | stale-etag             | an L1 Layer 1     | gets 412, then re-syncs           | PUT /beds/1/name with the mutated ETag, GET /beds/1                            | pass         |
       | stale-etag             | an L1 Layer 1     | resubmits the stale act           | PUT /beds/1/name with the mutated ETag, PUT /beds/1/name with the mutated ETag | FAIL         |
-      | stale-etag             | an L1 Layer 1     | never acts                        | nothing                                                                        | inconclusive |
+      | stale-etag             | an L1 Layer 1     | never makes the act it made unmutated | nothing                                                                    | FAIL         |
       | relax-layer1-cache     | an L1 Layer 1     | re-reads it, saying no-cache      | GET /beds/1 with no-cache                                                      | pass         |
       | relax-layer1-cache     | an L1 Layer 1     | re-reads it without no-cache      | GET /beds/1                                                                    | FAIL         |
       | relax-layer1-cache     | an L1 Layer 1     | acts right after reading it       | PUT /beds/1/name                                                               | FAIL         |
@@ -57,7 +59,8 @@ Feature: The first plugin pack attacks the client rules the spec names
       | drop-affordance        | an L0 Layer 1     | acts on the dropped one anyway    | PUT /beds/1/name                                                               | FAIL         |
       | flip-byte              | an affordance set | refetches the set before acting   | GET /forms/sha256-abc, PUT /beds/1/name                                        | pass         |
       | flip-byte              | an affordance set | acts from the corrupted set       | PUT /beds/1/name                                                               | FAIL         |
-      | flip-byte              | an affordance set | does nothing                      | nothing                                                                        | inconclusive |
+      | flip-byte              | an affordance set | never uses the set, nor refetches it | nothing                                                                     | pass         |
+      | alias-forms-href       | an L1 Layer 1     | never follows the link            | nothing                                                                        | FAIL         |
       | flip-byte              | a schema          | refetches the schema              | GET /schemas/sha256-def                                                        | pass         |
       | flip-byte              | a schema          | acts with the corrupted schema    | PUT /beds/1/name                                                               | FAIL         |
 
@@ -66,6 +69,7 @@ Feature: The first plugin pack attacks the client rules the spec names
     decided, tied by trace and span to the request the decision was about;
     that can turn silence into an attested pass, never a failure into one.
     Given only the "<plugin>" plugin from the pack
+    And the dry run of that client sends GET the forms link, PUT /beds/1/name with the original ETag
     And <response> response goes out to client "artie"
     When client "artie" reports "<event>" for <subject>
     Then the verdict for "<plugin>" is attested
@@ -83,12 +87,14 @@ Feature: The first plugin pack attacks the client rules the spec names
     its act. The event names the relation and the span of the re-read, not of the
     response that was mutated.
     Given only the "drop-affordance" plugin from the pack
+    And the dry run of that client sends PUT /beds/1/name
     And an L0 Layer 1 response goes out to client "artie"
     When client "artie" finds the dropped affordance "rename" gone on a re-read, and reports "affordance.absent"
     Then the verdict for "drop-affordance" is attested
 
   Scenario: drop-affordance: an event about another relation changes nothing
     Given only the "drop-affordance" plugin from the pack
+    And the dry run of that client sends PUT /beds/1/name
     And an L0 Layer 1 response goes out to client "artie"
     When client "artie" finds the dropped affordance "harvest" gone on a re-read, and reports "affordance.absent"
     Then "drop-affordance" has no verdict yet

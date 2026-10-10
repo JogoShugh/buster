@@ -112,6 +112,28 @@ Feature: Buster runs as the first WebFilter in a Spring WebFlux server
     When Buster prepares the environment
     Then the banner location is "classpath:mine.txt"
 
+  Scenario: A campaign is recorded, planned and armed over HTTP
+    Given Buster runs with the plugin pack
+    When a client POSTs "/_buster/campaign/record"
+    And the client with User-Agent "ARTIE/0.5 (grow; first)" GETs "/beds/1"
+    And the client with User-Agent "ARTIE/0.5 (grow; first)" GETs "/beds/1"
+    And a client GETs "/_buster/campaign/plan"
+    Then the plan JSON arms "relax-layer1-cache" for client "ARTIE/0.5 (grow; first)"
+    When a client POSTs "/_buster/campaign/arm?round=1"
+    And the client with User-Agent "ARTIE/0.5 (grow; first)" GETs "/beds/1"
+    Then the response has Cache-Control "private, max-age=3600"
+    When the client with User-Agent "ARTIE/0.5 (other; first)" GETs "/beds/1"
+    Then the response has Cache-Control "no-cache"
+
+  Scenario: The report carries the campaign gate
+    Given Buster runs with the plugin pack
+    When a client POSTs "/_buster/campaign/record"
+    And the client with User-Agent "ARTIE/0.5 (grow; first)" GETs "/beds/1"
+    And a client GETs "/_buster/campaign/plan"
+    And a client GETs "/_buster/report"
+    Then the report's campaign has a coverage hole for "stale-etag"
+    And the report's campaign is not ok
+
   Scenario: The filter runs before every other filter
     Given Buster runs with a plugin that renames every bed to "Chewed"
     Then the Buster filter has the highest precedence

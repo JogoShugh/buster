@@ -12,6 +12,10 @@ plugin("alias-forms-href") {
         val link = Hal.link(doc, Hal.FORMS_REL) ?: skip("no forms link")
         val href = link.path("href").asText()
         if ('?' in href) skip("forms link already has a query")
+        // Silence here is a FAIL: a client that never follows the link was never tested. So the
+        // mutation is made only where the dry run shows this client following it.
+        val seen = future ?: skip("no dry run, so silence would be a guess")
+        if (seen.none { it.isGet && it.path == href }) skip("the client never follows $href in its dry run")
         val alias = "buster=%08x".format(random.nextInt())
         link.put("href", "$href?$alias")
         writeJson(doc)
@@ -25,7 +29,7 @@ plugin("alias-forms-href") {
                     else -> pending()
                 }
             }
-            onExpire { inconclusive("never followed the forms link") }
+            onExpire { fail("never followed the forms link, which its dry run did") }
         }
     }
 }

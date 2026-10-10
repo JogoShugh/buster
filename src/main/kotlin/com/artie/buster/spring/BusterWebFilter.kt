@@ -6,6 +6,7 @@ import com.artie.buster.core.ClientEvent
 import com.artie.buster.core.Engine
 import com.artie.buster.core.Hal
 import com.artie.buster.core.Headers
+import com.artie.buster.core.campaignReport
 import com.artie.buster.core.fields
 import org.reactivestreams.Publisher
 import org.springframework.core.Ordered
@@ -46,7 +47,9 @@ class BusterWebFilter(
             REPORT_PATH -> report(exchange)
             VIEW_PATH -> write(exchange, HTML, LiveView.PAGE.toByteArray())
             EVENTS_PATH -> events(exchange)
-            else -> {
+            else -> if (exchange.request.path.value().startsWith(CampaignEndpoint.PATH)) {
+                campaign(exchange)
+            } else {
                 val req = toBuster(exchange.request)
                 engine.request(req)
                 chain.filter(exchange.mutate().response(Mutating(exchange.response, req)).build())
@@ -102,6 +105,15 @@ class BusterWebFilter(
         )
     }
 
+    private fun campaign(exchange: ServerWebExchange): Mono<Void> {
+        val request = exchange.request
+        val action = request.path.value().removePrefix(CampaignEndpoint.PATH)
+        val round = request.queryParams.getFirst("round")
+        val reply = CampaignEndpoint(engine).handle(request.method.name(), action, round)
+        exchange.response.statusCode = HttpStatusCode.valueOf(reply.status)
+        return write(exchange, MediaType.APPLICATION_JSON, Hal.mapper.writeValueAsBytes(reply.body))
+    }
+
     /** POST /_buster/events: one or more client event lines (JSON Lines), handed to the verifier. */
     private fun events(exchange: ServerWebExchange): Mono<Void> {
         if (exchange.request.method != HttpMethod.POST) {
@@ -140,9 +152,19 @@ class BusterWebFilter(
             mapOf(
                 "seed" to engine.seed, "paceMs" to pace.toMillis(),
                 "mutations" to mutations.map { it.fields() }, "verdicts" to verdicts.map { it.fields() },
+                "campaign" to campaignJson(),
             ),
         )
         return write(exchange, MediaType.APPLICATION_JSON, body)
+    }
+
+    /** The campaign gate: no FAIL, and a combination for every plugin. */
+    private fun campaignJson(): Map<String, Any?> {
+        val report = engine.campaignReport()
+        return mapOf(
+            "mode" to report.mode.name, "round" to report.round, "coverage" to report.coverage,
+            "holes" to report.holes, "matrix" to report.matrix, "failures" to report.failures, "ok" to report.ok,
+        )
     }
 
     private fun write(exchange: ServerWebExchange, type: MediaType, body: ByteArray): Mono<Void> {

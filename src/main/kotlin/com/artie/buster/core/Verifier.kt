@@ -89,6 +89,13 @@ class Verifier(private val log: MutationLog) {
     private val open = HashMap<String, MutableList<Open>>()
     private val verdicts = mutableListOf<Verdict>()
 
+    /**
+     * In a campaign a window is not a count of requests: an expectation stays open until the
+     * client is done, the round ends, or the wire or the log settles it.
+     */
+    @Volatile
+    var windowless = false
+
     @Synchronized
     fun register(record: MutationRecord, exp: Expectation) {
         open.getOrPut(record.clientId) { mutableListOf() }.add(Open(record, exp))
@@ -102,7 +109,7 @@ class Verifier(private val log: MutationLog) {
             val o = iterator.next()
             o.seen++
             var outcome = o.exp.step(req)
-            if (outcome == Outcome.Pending && o.seen >= o.exp.window) outcome = o.exp.expire()
+            if (!windowless && outcome == Outcome.Pending && o.seen >= o.exp.window) outcome = o.exp.expire()
             if (outcome != Outcome.Pending) {
                 close(o, outcome)
                 iterator.remove()

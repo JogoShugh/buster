@@ -12,6 +12,8 @@ plugin("lie-preference-applied") {
         val doc = json() ?: skip("body is not a JSON object")
         if (Forms.embedded(doc) != null) skip("affordances are embedded, so L0 is not a lie")
         val href = Hal.link(doc, Hal.FORMS_REL)?.path("href")?.asText() ?: skip("no forms link")
+        // Only where the client follows the link, so there is something to refuse.
+        future?.let { seen -> if (seen.none { it.isGet && it.path == href }) skip("the client never follows $href") }
         response.headers.remove("Preference-Applied")
         val path = request.path
         detail("removed Preference-Applied: $applied; the body still links $href")
