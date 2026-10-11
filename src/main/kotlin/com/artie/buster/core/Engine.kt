@@ -110,7 +110,7 @@ class Engine(
         val work = ex.res.copy()
         val scope = MutationScope(ex.req, work, ex.classification, random, future)
         try {
-            plugin.mutate(scope)
+            plugin.run(scope)
         } catch (skip: SkipMutation) {
             log.note("${plugin.name} skipped: ${skip.reason}")
             return null

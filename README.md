@@ -187,6 +187,7 @@ Inside `plugin { ... }`:
 | `on(Layer.RESOURCE, ...)` | The layers it applies to. Required. `Layer.OTHER` is any response that is not H.E.A.R.T. |
 | `rungs(Rung.L1, ...)` | The rungs it applies to. Default: every rung. |
 | `weight(n)` | Relative chance of being picked. Default 1. |
+| `silenceMeans(Silence.FAIL)` | What a client that does nothing after the mutation means. Default `Silence.PASS`. A `FAIL` plugin is made only with a dry run, and only after `onlyWhere` says what the client must be shown to do. |
 | `mutate { ... }` | What the plugin does to a response. Required. |
 
 Inside `mutate { ... }`:
@@ -197,6 +198,8 @@ Inside `mutate { ... }`:
 | `random` | The seeded random source for this exchange. Use only this, so replay works. |
 | `resourcePath` | The path of the resource this response is the state of: `Content-Location` (RFC 9110 §8.7), else the HAL self link, else the request path. An act answers at its action URL, so it is the resource, not `request.path`, that a later read is of. |
 | `future` | What this client sent after this request in the dry run (see [Campaigns](#campaigns-aiming-each-mutation)), or `null` with no dry run. Skip when the client never exercises the rule. |
+| `get(path)`, `act(ifMatch = etag)`, `act(on = form)`, `anyAct`, `anyOf(...)`, `.with(cacheControl = "no-cache")` | Matchers: values that test a request. The same one arms a mutation and judges the client, so the two cannot drift apart. They are available inside `expect` too. |
+| `onlyWhere(client does matcher)` | Make the mutation only where the dry run shows the client doing that. Skips, with a reason that names the action, when it never does. |
 | `json()` / `writeJson(node)` | Read the body as a JSON object, write it back. |
 | `detail(text)` | What was changed, for the log. |
 | `skip(reason)` | Leave the response alone. The skip is logged. |

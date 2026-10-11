@@ -66,7 +66,7 @@ class ExpectationBuilder(
     val trigger: BusterRequest,
     /** The resource the mutated response is the state of; see [MutationScope.resourcePath]. */
     private val resource: String = "",
-) {
+) : Matchers {
     private var step: (BusterRequest) -> Outcome = { Outcome.Pending }
     private var expire: (() -> Outcome.Decided)? = null
     private var event: (ClientEvent) -> Outcome = { Outcome.Pending }

@@ -5,6 +5,7 @@ import com.artie.buster.core.Layer
 import com.artie.buster.core.MutationScope
 import com.artie.buster.core.Plugin
 import com.artie.buster.core.Rung
+import com.artie.buster.core.Silence
 
 /** The top level of a plugin script. A script is evaluated with this as its implicit receiver. */
 @BusterDslMarker
@@ -27,6 +28,7 @@ class PluginBuilder(private val name: String) {
     private val layers = mutableSetOf<Layer>()
     private var rungs: Set<Rung> = Rung.entries.toSet()
     private var weight = 1
+    private var silence = Silence.PASS
     private var mutate: (MutationScope.() -> Unit)? = null
 
     /** The spec sections the plugin attacks. */
@@ -49,6 +51,15 @@ class PluginBuilder(private val name: String) {
         weight = n
     }
 
+    /**
+     * What a client that does nothing after a mutation means. PASS (the default) for a rule it can
+     * only break by doing something; FAIL for one it must act on. A FAIL plugin is made only with a
+     * dry run, and only after onlyWhere says what the client must be shown to do.
+     */
+    fun silenceMeans(silence: Silence) {
+        this.silence = silence
+    }
+
     fun mutate(block: MutationScope.() -> Unit) {
         mutate = block
     }
@@ -58,6 +69,6 @@ class PluginBuilder(private val name: String) {
         require(rungs.isNotEmpty()) { "plugin $name: rungs(...) names no rung" }
         require(weight >= 1) { "plugin $name: weight must be at least 1" }
         val block = requireNotNull(mutate) { "plugin $name: no mutate { } block" }
-        return Plugin(name, spec.toList(), layers.toSet(), rungs, weight, block)
+        return Plugin(name, spec.toList(), layers.toSet(), rungs, weight, block).also { it.silence = silence }
     }
 }

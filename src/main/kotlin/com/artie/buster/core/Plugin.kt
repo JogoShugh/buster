@@ -8,6 +8,13 @@ import kotlin.random.Random
 @DslMarker
 annotation class BusterDslMarker
 
+/**
+ * What a client that does nothing after a mutation means. PASS: it was never asked to do
+ * anything, so silence is fine. FAIL: it must act, so silence is a failure, and the mutation is
+ * made only where the dry run shows it will.
+ */
+enum class Silence { PASS, FAIL }
+
 /** One mutation Buster can apply, as built by the DSL. */
 class Plugin(
     val name: String,
@@ -17,9 +24,27 @@ class Plugin(
     val weight: Int,
     val mutate: MutationScope.() -> Unit,
 ) {
+    /** Set by the DSL's silenceMeans; PASS for a plugin that says nothing. */
+    var silence: Silence = Silence.PASS
+        internal set
+
     fun appliesTo(classification: Classification) =
         classification.layer in layers && classification.rung in rungs
+
+    /**
+     * Runs [mutate]. A plugin whose silence is a FAIL is made only with a dry run, and only after
+     * saying with onlyWhere what the client must be shown to do.
+     */
+    fun run(scope: MutationScope) {
+        if (silence == Silence.FAIL && scope.future == null) throw SkipMutation(NO_DRY_RUN)
+        mutate(scope)
+        if (silence == Silence.FAIL && !scope.armed) {
+            throw SkipMutation("silenceMeans(FAIL) but mutate never called onlyWhere")
+        }
+    }
 }
+
+internal const val NO_DRY_RUN = "no dry run, so silence would be a guess"
 
 /** Thrown by [MutationScope.skip]; the engine discards whatever the plugin changed. */
 class SkipMutation(val reason: String) : RuntimeException(reason, null, false, false)
@@ -38,16 +63,31 @@ class MutationScope(
      * a rule the client never exercises skips when the future shows it never will.
      */
     val future: List<BusterRequest>? = null,
-) {
+) : Matchers {
     /**
      * The path of the resource this response is the state of: Content-Location, else the HAL
      * self link, else the request path. For an act's response it is the resource, not the action.
      */
     val resourcePath: String = Resource.pathOf(request, response)
 
+    /** Reads as `onlyWhere(client does get("/forms/x"))`. */
+    val client = Client
+
     internal val details = mutableListOf<String>()
     internal val expectations = mutableListOf<Expectation>()
     internal var keepsCacheControl = false
+    internal var armed = false
+
+    /**
+     * Makes the mutation only where the dry run shows the client doing [matcher], so there is
+     * something to judge. Without a dry run there is nothing to check against: a plugin whose
+     * silence is a PASS goes on, and one whose silence is a FAIL was already skipped.
+     */
+    fun onlyWhere(matcher: Matcher) {
+        armed = true
+        val seen = future ?: return
+        if (seen.none(matcher::matches)) skip("the client never does ${matcher.description} in its dry run")
+    }
 
     fun json(): ObjectNode? = Hal.parseObject(response.body)
 
