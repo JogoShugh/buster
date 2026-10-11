@@ -211,7 +211,14 @@ Inside `expect { ... }`:
 | Call | Meaning |
 | - | - |
 | `trigger` | The request whose response was mutated, so a plugin can judge the read that got the mutation. |
-| `onRequest { req -> outcome }` | Runs on each later request from the same client. |
+| `seeing(matcher) passes "…"` / `fails "…"` | What a later request from the same client means. The reason can be a block that reads the request: `seeing(anyAct) fails { "acted on ${it.path}" }`. The first rule that matches decides the request. |
+| `seeing(matcher) { req -> outcome }` | The same, with the whole decision in the block. |
+| `seeing(logs("event.name")) attests "…"` | A line of the client's log that matches attests a pass. Narrow with `.thisResponse`, `.about(path)`, `.with("heart.rel", "rename")`. |
+| `already(matcher)` | Whether the client did that earlier in this window. A rule asks; no flag is kept. |
+| `resource` | The path of the resource the mutated response is the state of. |
+| `silence passes "…"` / `fails "…"` | What silence means. Required, as is `onExpire`; one of them. |
+| `superseded passes "…"` | What it means that the client was given the resource again, whole and unmutated. |
+| `onRequest { req -> outcome }` | Runs on each later request from the same client, when no `seeing` rule matched. |
 | `onEvent { event -> outcome }` | Runs on each line of the same client's event log. It can only `attest(reason)` a pass. |
 | `onExpire { decided }` | Required. What silence means: the client is done, or the round ended, and nothing settled it. It can only return `pass(reason)` or `fail(reason)`. |
 | `pass(reason)`, `fail(reason)`, `attest(reason)`, `pending()` | The outcomes. `pending()` is for `onRequest` and `onEvent` only. |

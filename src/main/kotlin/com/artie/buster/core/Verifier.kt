@@ -65,23 +65,41 @@ class ExpectationBuilder(
      */
     val trigger: BusterRequest,
     /** The resource the mutated response is the state of; see [MutationScope.resourcePath]. */
-    private val resource: String = "",
-) : Matchers {
-    private var step: (BusterRequest) -> Outcome = { Outcome.Pending }
+    val resource: String = "",
+) : Matchers, Outcomes {
     private var expire: (() -> Outcome.Decided)? = null
-    private var event: (ClientEvent) -> Outcome = { Outcome.Pending }
-    private var superseded: (() -> Outcome.Decided)? = null
+    private var supersededBlock: (() -> Outcome.Decided)? = null
+    private val book = Rulebook()
+
+    /** What silence means, as `silence passes "..."` or `silence fails { "..." }`. */
+    val silence = Settles()
+
+    /** What it means that the client was given the resource again whole and unmutated. */
+    val superseded = Settles()
 
     fun onRequest(block: (BusterRequest) -> Outcome) {
-        step = block
+        book.step = block
     }
 
     /** Judges a line of the client's event log. Only [attest] or [pending] count; nothing else is taken from it. */
     fun onEvent(block: (ClientEvent) -> Outcome) {
-        event = block
+        book.event = block
     }
 
-    fun attest(reason: String): Outcome = Outcome.Attested(reason)
+    /** A request that matches means this. The first rule that matches decides the request. */
+    fun seeing(matcher: Matcher): Seeing = Seeing(matcher, book::addRequestRule)
+
+    /** The same, with the whole decision in the block, for a request that means different things. */
+    fun seeing(matcher: Matcher, decide: (BusterRequest) -> Outcome) = book.addRequestRule(matcher, decide)
+
+    /** A line of the client's log that matches attests this. */
+    fun seeing(matcher: EventMatcher): SeeingEvent = SeeingEvent(matcher, book::addEventRule)
+
+    /** A line of the client's event log called [name]; narrow it with `thisResponse`, `about`, `with`. */
+    fun logs(name: String): EventMatcher = EventMatcher("log $name", trigger.spanId) { it.name == name }
+
+    /** Whether the client already did [matcher], earlier in this window. A rule asks, so no flag is kept. */
+    fun already(matcher: Matcher): Boolean = book.already(matcher)
 
     /**
      * What silence means: the client is done, or the round has ended, and nothing settled it.
@@ -98,21 +116,16 @@ class ExpectationBuilder(
      * mutated representation is not what the client is judged on after it.
      */
     fun onSuperseded(block: () -> Outcome.Decided) {
-        superseded = block
+        supersededBlock = block
     }
-
-    fun pass(reason: String): Outcome.Decided = Outcome.Pass(reason)
-
-    fun fail(reason: String): Outcome.Decided = Outcome.Fail(reason)
-
-    fun pending(): Outcome = Outcome.Pending
 
     internal fun build(): Expectation {
         require(window >= 1) { "expectation '$description': window must be at least 1" }
-        val silence = requireNotNull(expire) {
+        val silence = requireNotNull(expire ?: silence.decide) {
             "expectation '$description': no onExpire { } block, so silence has no meaning"
         }
-        return Expectation(description, window, resource, Rules(step, silence, event, superseded))
+        val whenSuperseded = superseded.decide ?: supersededBlock
+        return Expectation(description, window, resource, Rules(book::judge, silence, book::attestFrom, whenSuperseded))
     }
 }
 
