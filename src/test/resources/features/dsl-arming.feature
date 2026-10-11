@@ -137,6 +137,12 @@ Feature: A plugin says what it needs from the client's dry run with matchers, no
       | act(ifMatch = "\"s1\"")              | PUT /beds/1/name with the original ETag  | was changed            |
       | act(ifMatch = "\"s2\"")              | PUT /beds/1/name with the original ETag  | went out unchanged     |
       | anyOf(get("/beds/9"), anyAct)        | PUT /beds/1/name                         | was changed            |
+      | anyRequestTo("/beds/1")              | DELETE /beds/1                           | was changed            |
+      | anyRequestTo("/beds/1")              | GET /beds/2                              | went out unchanged     |
+      | request("DELETE", "/beds/1")         | DELETE /beds/1                           | was changed            |
+      | request("DELETE", "/beds/1")         | GET /beds/1                              | went out unchanged     |
+      | actAt("/beds/1/name")                | PUT /beds/1/name                         | was changed            |
+      | actAt("/beds/1/name")                | GET /beds/1/name                         | went out unchanged     |
 
   Scenario Outline: act(on = form) matches the acts an embedded affordance allows
     Given the plugin script:
