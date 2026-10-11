@@ -6,9 +6,9 @@ plugin("strip-forms-integrity") {
     rungs(Rung.L1, Rung.L2)
 
     mutate {
-        val doc = json() ?: skip("body is not a JSON object")
-        val link = Hal.link(doc, Hal.FORMS_REL) ?: skip("no forms link")
-        val href = link.path("href").asText()
+        val doc = jsonBody
+        val link = doc.formsLink ?: skip("no forms link")
+        val href = doc.formsHref ?: skip("forms link has no href")
         link.remove("integrity") ?: skip("forms link already has no integrity")
         // Only where the client follows the link, so there is something to refuse.
         val follows = get(href)

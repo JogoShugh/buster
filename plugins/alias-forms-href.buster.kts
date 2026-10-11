@@ -10,9 +10,9 @@ plugin("alias-forms-href") {
     silenceMeans(Silence.FAIL)
 
     mutate {
-        val doc = json() ?: skip("body is not a JSON object")
-        val link = Hal.link(doc, Hal.FORMS_REL) ?: skip("no forms link")
-        val href = link.path("href").asText()
+        val doc = jsonBody
+        val link = doc.formsLink ?: skip("no forms link")
+        val href = doc.formsHref ?: skip("forms link has no href")
         if ('?' in href) skip("forms link already has a query")
         val follows = get(href)
         onlyWhere(client does follows)

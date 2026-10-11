@@ -26,10 +26,8 @@ plugin("relax-layer1-cache") {
         val reads = get(resourcePath)
         val gotByRead = request.isGet
         if (!gotByRead) onlyWhere(client does reads)
-        val before = response.headers["Cache-Control"].orEmpty()
-        response.headers["Cache-Control"] = "private, max-age=3600"
+        header("Cache-Control").replace("private, max-age=3600")
         keepCacheControl()
-        detail("Cache-Control $before became private, max-age=3600")
 
         expect("re-read Layer 1 with Cache-Control: no-cache, whatever the response said", window = 5) {
             seeing(get(resource).with(cacheControl = "no-cache")) passes "re-read $resource with no-cache"

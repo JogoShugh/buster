@@ -36,6 +36,24 @@ class DslSteps(private val world: World) {
         assertTrue("$plugin skipped: $reason" in notes) { "notes: $notes" }
     }
 
+    @Given("a plain text response for {string} goes out to client {string}")
+    fun plainText(path: String, client: String) = world.plainTextGoesOut(path, client)
+
+    @Then("the response header {string} is {string}")
+    fun headerIs(name: String, value: String) = assertEquals(value, world.response.headers[name])
+
+    @Then("the response has no header {string}")
+    fun noHeader(name: String) = assertFalse(world.response.headers.has(name))
+
+    @Then("the logged mutation detail is {string}")
+    fun detailIs(detail: String) = assertEquals(detail, loggedDetail())
+
+    @Then("the logged mutation detail contains {string}")
+    fun detailContains(text: String) = assertTrue(text in loggedDetail()) { "detail: ${loggedDetail()}" }
+
+    private fun loggedDetail(): String = world.log.recent().map { Hal.mapper.readTree(it) }
+        .last { it["event"].asText() == "mutation" }["detail"].asText()
+
     @Then("the response was changed")
     fun wasChanged() {
         val same = world.original.body.contentEquals(world.response.body) &&

@@ -8,15 +8,15 @@ plugin("lie-preference-applied") {
     rungs(Rung.L1, Rung.L2)
 
     mutate {
-        val applied = response.headers["Preference-Applied"] ?: skip("no Preference-Applied")
-        val doc = json() ?: skip("body is not a JSON object")
+        header("Preference-Applied").value ?: skip("no Preference-Applied")
+        val doc = jsonBody
         if (Forms.embedded(doc) != null) skip("affordances are embedded, so L0 is not a lie")
-        val href = Hal.link(doc, Hal.FORMS_REL)?.path("href")?.asText() ?: skip("no forms link")
+        val href = doc.formsHref ?: skip("no forms link")
         // Only where the client follows the link, so there is something to refuse.
         val follows = get(href)
         onlyWhere(client does follows)
-        response.headers.remove("Preference-Applied")
-        detail("removed Preference-Applied: $applied; the body still links $href")
+        header("Preference-Applied").remove()
+        detail("the body still links $href")
 
         expect("take L0 from the header, find no affordances, and fail safe", window = 5) {
             // An act before the client has read the resource again was made with no affordances.

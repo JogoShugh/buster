@@ -9,11 +9,9 @@ plugin("stale-etag") {
     silenceMeans(Silence.FAIL)
 
     mutate {
-        val original = response.headers["ETag"] ?: skip("no ETag")
+        val original = header("ETag").value ?: skip("no ETag")
         onlyWhere(client does act(ifMatch = original))
-        val forged = "\"buster-%08x\"".format(random.nextInt())
-        response.headers["ETag"] = forged
-        detail("ETag $original became $forged")
+        val forged = header("ETag").replace("\"buster-%08x\"".format(random.nextInt()))
 
         // The resource the ETag belongs to, which for an act's response is not the action URL.
         expect("discard the act on 412 and re-sync; never resubmit it", window = 5) {

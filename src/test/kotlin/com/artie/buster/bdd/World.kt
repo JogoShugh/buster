@@ -69,6 +69,10 @@ class World {
     fun plainJsonGoesOut(path: String, client: String) =
         goesOut(path, client, BusterResponse(200, headers("application/json", "no-cache"), TODO.toByteArray()))
 
+    /** A 200 that is not JSON at all. */
+    fun plainTextGoesOut(path: String, client: String) =
+        goesOut(path, client, BusterResponse(200, headers("text/plain", "no-cache"), "Walk Buster".toByteArray()))
+
     /** An RFC 9457 problem response. */
     fun problemGoesOut(path: String, client: String) {
         val headers = headers("application/problem+json", "no-cache")

@@ -7,7 +7,7 @@ plugin("drop-affordance") {
     rungs(Rung.L0)
 
     mutate {
-        val doc = json() ?: skip("body is not a JSON object")
+        val doc = jsonBody
         val forms = Forms.embedded(doc) ?: skip("no embedded affordances")
         val names = forms.fieldNames().asSequence().toList()
         if (names.isEmpty()) skip("no affordances")

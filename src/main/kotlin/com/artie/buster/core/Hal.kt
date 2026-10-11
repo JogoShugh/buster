@@ -55,6 +55,12 @@ object Hal {
     }
 }
 
+/** The link to the affordance set, as the document wrote it. */
+val ObjectNode.formsLink: ObjectNode? get() = Hal.link(this, Hal.FORMS_REL)
+
+/** Where the forms link points, or null when it has no href. */
+val ObjectNode.formsHref: String? get() = formsLink?.path("href")?.takeIf { it.isTextual }?.asText()
+
 /** Affordances in either dialect: HAL Schema Forms _forms or HAL-FORMS _templates. */
 object Forms {
     fun embedded(doc: ObjectNode): ObjectNode? =

@@ -9,20 +9,14 @@ plugin("flip-byte") {
     on(Layer.AFFORDANCE_SET, Layer.SCHEMA)
 
     mutate {
-        val letters = Hal.lettersInStrings(response.body)
-        if (letters.isEmpty()) skip("no letters inside JSON strings")
         // Read the affordances before the flip, so the expectation knows which acts they allow.
         // A schema has no targets of its own: any act of the client's uses it.
         val forms = json()?.let { Forms.embedded(it) }?.elements()?.asSequence()?.toList()
         val uses = if (forms == null) anyAct else anyOf(*forms.map { act(on = it) }.toTypedArray())
         onlyWhere(client does uses)
-        val at = letters[random.nextInt(letters.size)]
-        val before = response.body[at].toInt().toChar()
-        val after = if (before == 'x') 'y' else 'x'
-        response.body = response.body.copyOf().also { it[at] = after.code.toByte() }
+        flipLetterInString()
         val path = request.path
         val layer = classification.layer
-        detail("byte $at of $path: '$before' became '$after'")
 
         expect("refuse the corrupted $layer and never act from it", window = 5) {
             seeing(logs("integrity.refused").thisResponse) attests "its log says it refused $path"

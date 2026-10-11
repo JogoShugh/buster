@@ -18,11 +18,7 @@ plugin("flaky-503") {
         val method = request.method
         val path = request.path
         onlyWhere(client does anyRequestTo(path))
-        response.status = 503
-        response.headers["Content-Type"] = "application/problem+json"
-        response.headers["Retry-After"] = "1"
-        response.body = """{"status":503,"title":"Service Unavailable"}""".toByteArray()
-        detail("$method $path answered 503, Retry-After 1")
+        answerWithProblem(503, "Service Unavailable", retryAfterSeconds = 1)
 
         expect("retry $path rather than change it unread", window = 3) {
             seeing(request(method, path)) passes "retried $method $path"

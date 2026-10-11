@@ -6,10 +6,10 @@ plugin("drop-curie") {
     rungs(Rung.L1, Rung.L2)
 
     mutate {
-        val doc = json() ?: skip("body is not a JSON object")
+        val doc = jsonBody
         val key = Hal.linkKey(doc, Hal.FORMS_REL) ?: skip("no forms link")
         if (!key.contains(':') || key.contains("://")) skip("forms link is not a CURIE")
-        val href = Hal.link(doc, Hal.FORMS_REL)?.path("href")?.asText() ?: skip("forms link has no href")
+        val href = doc.formsHref ?: skip("forms link has no href")
         // Only where the client follows the link, so there is something to refuse.
         val follows = get(href)
         onlyWhere(client does follows)

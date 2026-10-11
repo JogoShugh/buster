@@ -91,6 +91,35 @@ class MutationScope(
 
     fun json(): ObjectNode? = Hal.parseObject(response.body)
 
+    /** The body as a JSON object; the mutation is skipped when it is not one. */
+    val jsonBody: ObjectNode get() = json() ?: skip("body is not a JSON object")
+
+    /** A header of the response, to replace or remove. The change is noted in the detail. */
+    fun header(name: String): HeaderEdit = HeaderEdit(name, response.headers, ::detail)
+
+    /**
+     * Changes one letter inside a JSON string, chosen by the seeded random source. The body is
+     * still valid JSON, so only an integrity check can catch it. Skips when there is no letter.
+     */
+    fun flipLetterInString() {
+        val letters = Hal.lettersInStrings(response.body).ifEmpty { skip("no letters inside JSON strings") }
+        val at = letters[random.nextInt(letters.size)]
+        val before = response.body[at].toInt().toChar()
+        val after = if (before == 'x') 'y' else 'x'
+        response.body = response.body.copyOf().also { it[at] = after.code.toByte() }
+        detail("byte $at of ${request.path}: '$before' became '$after'")
+    }
+
+    /** Turns the response into an RFC 9457 problem: [status], [title], and a Retry-After if asked. */
+    fun answerWithProblem(status: Int, title: String, retryAfterSeconds: Int? = null) {
+        response.status = status
+        response.headers["Content-Type"] = "application/problem+json"
+        retryAfterSeconds?.let { response.headers["Retry-After"] = it.toString() }
+        response.body = """{"status":$status,"title":"$title"}""".toByteArray()
+        val retry = retryAfterSeconds?.let { ", Retry-After $it" }.orEmpty()
+        detail("${request.method} ${request.path} answered $status$retry")
+    }
+
     fun writeJson(node: JsonNode) {
         response.body = Hal.write(node)
     }
