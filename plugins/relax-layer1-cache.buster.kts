@@ -23,37 +23,23 @@ plugin("relax-layer1-cache") {
 
     mutate {
         // The resource to read again, which for an act's response is not the action URL.
-        val path = resourcePath
+        val reads = get(resourcePath)
         val gotByRead = request.isGet
-        if (!gotByRead) {
-            future?.let { seen ->
-                if (seen.none { it.isGet && it.path == path }) skip("the client never reads $path again in its dry run")
-            }
-        }
+        if (!gotByRead) onlyWhere(client does reads)
         val before = response.headers["Cache-Control"].orEmpty()
         response.headers["Cache-Control"] = "private, max-age=3600"
         keepCacheControl()
         detail("Cache-Control $before became private, max-age=3600")
-        fun saysNoCache(req: BusterRequest) =
-            req.headers["Cache-Control"].orEmpty().split(',').any { it.trim() == "no-cache" }
 
         expect("re-read Layer 1 with Cache-Control: no-cache, whatever the response said", window = 5) {
+            seeing(get(resource).with(cacheControl = "no-cache")) passes "re-read $resource with no-cache"
+            seeing(get(resource)) fails "re-read $resource without no-cache"
             // The read that got this response is wire evidence too, and the client is done with
             // it already: silence at the end is judged on it. A write has no directive to judge.
-            val readWithNoCache = !gotByRead || saysNoCache(trigger)
-            onRequest { req ->
-                when {
-                    req.isGet && req.path == path && saysNoCache(req) -> pass("re-read $path with no-cache")
-                    req.isGet && req.path == path -> fail("re-read $path without no-cache")
-                    else -> pending()
-                }
-            }
-            onExpire {
-                if (readWithNoCache) {
-                    pass("did not re-read $path without no-cache")
-                } else {
-                    fail("read $path without no-cache, and no later read said it")
-                }
+            if (!gotByRead || get(trigger.path).with(cacheControl = "no-cache").matches(trigger)) {
+                silence passes "did not re-read $resource without no-cache"
+            } else {
+                silence fails "read $resource without no-cache, and no later read said it"
             }
         }
     }

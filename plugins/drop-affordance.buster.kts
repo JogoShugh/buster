@@ -31,18 +31,12 @@ plugin("drop-affordance") {
             // After a 412 a client re-reads the resource, finds the affordance gone and drops its
             // act. Its log says so against the re-read's span, not this response's, so the event
             // is matched by client and relation.
-            onEvent { ev ->
-                if (ev.name == "affordance.absent" && ev.attributes["heart.rel"] == name) {
-                    attest("its log says it found $name gone")
-                } else {
-                    pending()
-                }
-            }
-            onRequest { req -> if (Forms.actsOn(req, dropped)) fail("acted on $name: $method ${req.path}") else pending() }
+            seeing(logs("affordance.absent").with("heart.rel", name)) attests "its log says it found $name gone"
+            seeing(act(on = dropped)) fails { "acted on $name: $method ${it.path}" }
             // The resource, given again unmutated, holds a manifest that may list the act again,
             // and acting on it is then what §6.2 asks.
-            onSuperseded { pass("was given the resource again, unmutated, before acting on $name") }
-            onExpire { pass("never acted on $name") }
+            superseded passes "was given the resource again, unmutated, before acting on $name"
+            silence passes "never acted on $name"
         }
     }
 }

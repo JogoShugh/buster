@@ -8,16 +8,16 @@
 plugin("flaky-503") {
     spec("RFC 9110 §15.6.4")
     on(Layer.OTHER)
+    // Silence is a FAIL here: a client that never retries was not tested. So only where the dry
+    // run shows the client going on to use this resource, which it must not change after a 503.
+    silenceMeans(Silence.FAIL)
 
     mutate {
         if (response.status !in 200..299) skip("only a success can turn flaky")
         if ("json" !in response.headers["Content-Type"].orEmpty()) skip("not JSON")
         val method = request.method
         val path = request.path
-        // Silence is a FAIL here, so only where the dry run shows the client going on to use this
-        // resource: there is then something it must not do after a 503.
-        val seen = future ?: skip("no dry run, so silence would be a guess")
-        if (seen.none { it.path == path }) skip("the client never goes on to use $path in its dry run")
+        onlyWhere(client does anyRequestTo(path))
         response.status = 503
         response.headers["Content-Type"] = "application/problem+json"
         response.headers["Retry-After"] = "1"
@@ -25,14 +25,9 @@ plugin("flaky-503") {
         detail("$method $path answered 503, Retry-After 1")
 
         expect("retry $path rather than change it unread", window = 3) {
-            onRequest { req ->
-                when {
-                    req.method == method && req.path == path -> pass("retried $method $path")
-                    req.isAct && req.path == path -> fail("${req.method} $path without reading it first")
-                    else -> pending()
-                }
-            }
-            onExpire { fail("never retried $path") }
+            seeing(request(method, path)) passes "retried $method $path"
+            seeing(actAt(path)) fails { "${it.method} $path without reading it first" }
+            silence fails "never retried $path"
         }
     }
 }

@@ -33,6 +33,16 @@ interface Matchers {
     fun act(on: JsonNode): Matcher =
         Matcher("an act on ${Forms.method(on)} ${Forms.target(on)}") { Forms.actsOn(it, on) }
 
+    /** An act made at exactly [path]. */
+    fun actAt(path: String): Matcher = Matcher("an act at $path") { it.isAct && it.path == path }
+
+    /** [method] at exactly [path]. */
+    fun request(method: String, path: String): Matcher =
+        Matcher("$method $path") { it.method.equals(method, ignoreCase = true) && it.path == path }
+
+    /** Any request, of any method, to exactly [path]. */
+    fun anyRequestTo(path: String): Matcher = Matcher("a request to $path") { it.path == path }
+
     /** Any one of [matchers]. */
     fun anyOf(vararg matchers: Matcher): Matcher =
         Matcher(matchers.joinToString(" or ") { it.description }) { req -> matchers.any { it.matches(req) } }

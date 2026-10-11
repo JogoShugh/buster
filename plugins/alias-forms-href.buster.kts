@@ -6,31 +6,31 @@ plugin("alias-forms-href") {
     spec("§6.5")
     on(Layer.RESOURCE)
     rungs(Rung.L1, Rung.L2)
+    // A client that never follows the link was never tested, so only where its dry run does.
+    silenceMeans(Silence.FAIL)
 
     mutate {
         val doc = json() ?: skip("body is not a JSON object")
         val link = Hal.link(doc, Hal.FORMS_REL) ?: skip("no forms link")
         val href = link.path("href").asText()
         if ('?' in href) skip("forms link already has a query")
-        // Silence here is a FAIL: a client that never follows the link was never tested. So the
-        // mutation is made only where the dry run shows this client following it.
-        val seen = future ?: skip("no dry run, so silence would be a guess")
-        if (seen.none { it.isGet && it.path == href }) skip("the client never follows $href in its dry run")
+        val follows = get(href)
+        onlyWhere(client does follows)
         val alias = "buster=%08x".format(random.nextInt())
         link.put("href", "$href?$alias")
         writeJson(doc)
         detail("forms link $href became $href?$alias")
 
         expect("follow the aliased forms link as given", window = 5) {
-            onRequest { req ->
-                when {
-                    req.isGet && req.path == href && req.query.orEmpty().contains(alias) -> pass("followed $href?$alias")
-                    req.isGet && req.path == href -> fail("requested $href without the alias: built the URL itself")
-                    else -> pending()
+            seeing(follows) { req ->
+                if (req.query.orEmpty().contains(alias)) {
+                    pass("followed $href?$alias")
+                } else {
+                    fail("requested $href without the alias: built the URL itself")
                 }
             }
-            onSuperseded { pass("read the resource again, and was answered a whole representation, before following $href") }
-            onExpire { fail("never followed the forms link, which its dry run did") }
+            superseded passes "read the resource again, and was answered a whole representation, before following $href"
+            silence fails "never followed the forms link, which its dry run did"
         }
     }
 }

@@ -13,29 +13,21 @@ plugin("lie-preference-applied") {
         if (Forms.embedded(doc) != null) skip("affordances are embedded, so L0 is not a lie")
         val href = Hal.link(doc, Hal.FORMS_REL)?.path("href")?.asText() ?: skip("no forms link")
         // Only where the client follows the link, so there is something to refuse.
-        future?.let { seen -> if (seen.none { it.isGet && it.path == href }) skip("the client never follows $href") }
+        val follows = get(href)
+        onlyWhere(client does follows)
         response.headers.remove("Preference-Applied")
-        // The resource to read again, which for an act's response is not the action URL.
-        val path = resourcePath
         detail("removed Preference-Applied: $applied; the body still links $href")
 
-        val span = request.spanId
-        // An act before the client has read $path again was made with no affordances to act from.
-        var reread = false
         expect("take L0 from the header, find no affordances, and fail safe", window = 5) {
-            onRequest { req ->
-                when {
-                    req.isGet && req.path == href -> fail("followed $href: read the rung from the body, not the header")
-                    req.isGet && req.path == path -> pending().also { reread = true }
-                    req.isAct && !reread -> fail("acted on ${req.path} with no affordances")
-                    else -> pending()
-                }
+            // An act before the client has read the resource again was made with no affordances.
+            val rereads = get(resource)
+            seeing(follows) fails "followed $href: read the rung from the body, not the header"
+            seeing(anyAct) { req ->
+                if (already(rereads)) pending() else fail("acted on ${req.path} with no affordances")
             }
-            onEvent { ev ->
-                if (ev.name == "forms.skipped" && ev.spanId == span) attest("its log says it skipped $href at L0") else pending()
-            }
-            onSuperseded { pass("read $path again, and was answered a whole representation, before following $href") }
-            onExpire { pass("treated $path as L0 with no affordances") }
+            seeing(logs("forms.skipped").thisResponse) attests "its log says it skipped $href at L0"
+            superseded passes "read $resource again, and was answered a whole representation, before following $href"
+            silence passes "treated $resource as L0 with no affordances"
         }
     }
 }

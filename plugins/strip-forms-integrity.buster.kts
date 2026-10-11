@@ -11,23 +11,17 @@ plugin("strip-forms-integrity") {
         val href = link.path("href").asText()
         link.remove("integrity") ?: skip("forms link already has no integrity")
         // Only where the client follows the link, so there is something to refuse.
-        future?.let { seen -> if (seen.none { it.isGet && it.path == href }) skip("the client never follows $href") }
+        val follows = get(href)
+        onlyWhere(client does follows)
         writeJson(doc)
         detail("removed integrity from the forms link $href")
 
-        val client = request.clientId
         expect("refuse to follow a forms link without integrity", window = 5) {
             // Refused before any request, so the event names the link by its URL, not a span.
-            onEvent { ev ->
-                if (ev.name == "integrity.refused" && ev.traceId == client && ev.path == href) {
-                    attest("its log says it refused $href")
-                } else {
-                    pending()
-                }
-            }
-            onRequest { req -> if (req.isGet && req.path == href) fail("followed $href") else pending() }
-            onSuperseded { pass("read the resource again, and was answered a whole representation, before following $href") }
-            onExpire { pass("never followed $href") }
+            seeing(logs("integrity.refused").about(href)) attests "its log says it refused $href"
+            seeing(follows) fails "followed $href"
+            superseded passes "read the resource again, and was answered a whole representation, before following $href"
+            silence passes "never followed $href"
         }
     }
 }

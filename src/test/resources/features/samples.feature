@@ -30,6 +30,7 @@ Feature: A sample plugin for any JSON API, nothing to do with H.E.A.R.T.
     Given the dry run of that client sends GET /todos/2
     When a plain JSON response for "/todos/1" goes out to client "app"
     Then the response went out unchanged
+    And "flaky-503" was skipped because "the client never does a request to /todos/1 in its dry run"
 
   Scenario: An error response is left alone
     When a 404 problem response for "/todos/9" goes out to client "app"

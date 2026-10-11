@@ -189,3 +189,20 @@ Feature: The first plugin pack attacks the client rules the spec names
     And the dry run of that client sends PUT /beds/1/name
     And an L1 act response naming "/beds/1" goes out to client "artie"
     Then the response went out unchanged
+    And "relax-layer1-cache" was skipped because "the client never does GET /beds/1 in its dry run"
+
+  # A plugin that arms with onlyWhere says in its skip which action the client never does,
+  # in the same words for every plugin.
+  Scenario Outline: <plugin> names the action its client never does
+    Given only the "<plugin>" plugin from the pack
+    And the dry run of that client sends GET /beds/2
+    When an L1 Layer 1 response goes out to client "artie"
+    Then the response went out unchanged
+    And "<plugin>" was skipped because "the client never does GET /forms/abc in its dry run"
+
+    Examples:
+      | plugin                 |
+      | drop-curie             |
+      | strip-forms-integrity  |
+      | alias-forms-href       |
+      | lie-preference-applied |

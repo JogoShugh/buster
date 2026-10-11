@@ -11,20 +11,18 @@ plugin("drop-curie") {
         if (!key.contains(':') || key.contains("://")) skip("forms link is not a CURIE")
         val href = Hal.link(doc, Hal.FORMS_REL)?.path("href")?.asText() ?: skip("forms link has no href")
         // Only where the client follows the link, so there is something to refuse.
-        future?.let { seen -> if (seen.none { it.isGet && it.path == href }) skip("the client never follows $href") }
+        val follows = get(href)
+        onlyWhere(client does follows)
         val links = Hal.links(doc) ?: skip("no _links")
         links.remove("curies")
         writeJson(doc)
         detail("removed _links.curies, so $key no longer expands")
 
-        val span = request.spanId
         expect("treat $key as an unknown relation", window = 5) {
-            onEvent { ev ->
-                if (ev.name == "forms.missing" && ev.spanId == span) attest("its log says it found no forms link") else pending()
-            }
-            onRequest { req -> if (req.isGet && req.path == href) fail("followed $key to $href") else pending() }
-            onSuperseded { pass("read the resource again, and was answered a whole representation, before following $key") }
-            onExpire { pass("never followed $key") }
+            seeing(logs("forms.missing").thisResponse) attests "its log says it found no forms link"
+            seeing(follows) fails "followed $key to $href"
+            superseded passes "read the resource again, and was answered a whole representation, before following $key"
+            silence passes "never followed $key"
         }
     }
 }
