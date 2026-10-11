@@ -113,6 +113,23 @@ class PluginPackSteps(private val world: World) {
         world.engine.respond(request, response)
     }
 
+    /** An act's 2xx answer, whole and unmutated: its Content-Location names the resource it shows. */
+    @When("client {string} is answered an unmutated act response naming {string}")
+    fun actAnsweredUnmutated(client: String, resource: String) {
+        // Another act than the dropped one, as the live client's free-throw is to its score-basket.
+        val request = BusterRequest("POST", "/beds/9/harvest", null, Headers(), client)
+        val headers = Headers()
+        headers["Content-Type"] = "application/hal+json"
+        headers["Cache-Control"] = "no-cache"
+        headers["ETag"] = "\"s2\""
+        headers["Content-Location"] = resource
+        // At L1, which drop-affordance leaves alone, as the live server's unmutated answer is.
+        headers["Preference-Applied"] = "forms=link"
+        val response = BusterResponse(200, headers, fixture("resource").toByteArray())
+        world.engine.request(request)
+        world.engine.respond(request, response)
+    }
+
     @Given("an L0 Layer 1 response goes out to client {string}")
     fun l0GoesOut(client: String) = world.layerOneGoesOut("/beds/1", client, body = fixture("resource-l0"))
 

@@ -59,14 +59,12 @@ class Engine(
         } else {
             bySeed(req, res, classification, future)
         }
-        // A whole, unmutated representation replaces whatever the client was given before; so does
-        // a 304, which tells the client the copy it holds is current. Buster did not mutate that.
-        val answered = res.status in SUCCESS || res.status == NOT_MODIFIED
-        if (record == null && req.isGet && answered) {
+        if (record == null && replacesWhatWasGiven(req, res)) {
             verifier.superseded(req.clientId, Resource.pathOf(req, res))
         }
         return record
     }
+
 
     private fun armed(req: BusterRequest, res: BusterResponse, classification: Classification): MutationRecord? {
         val combo = campaign.armedFor(req)
@@ -141,9 +139,23 @@ class Engine(
 
     private companion object {
         const val MAX_KEPT = 100_000
-        val SUCCESS = 200..299
-        const val NOT_MODIFIED = 304
     }
+}
+
+private const val FIRST_SUCCESS = 200
+private const val LAST_SUCCESS = 299
+private val SUCCESS = FIRST_SUCCESS..LAST_SUCCESS
+private const val NOT_MODIFIED = 304
+
+/**
+ * Whether an answer Buster did not mutate replaces whatever the client was given before. A whole
+ * representation does; so does a 304, which tells the client the copy it holds is current. An
+ * act's 2xx answer is a whole representation too, when Content-Location (RFC 9110 §8.7) names
+ * the resource it shows.
+ */
+private fun replacesWhatWasGiven(req: BusterRequest, res: BusterResponse): Boolean = when {
+    req.isGet -> res.status in SUCCESS || res.status == NOT_MODIFIED
+    else -> res.status in SUCCESS && res.headers["Content-Location"] != null
 }
 
 /** The campaign's state, and the gate: it fails on any FAIL, or on a plugin nothing exercised. */

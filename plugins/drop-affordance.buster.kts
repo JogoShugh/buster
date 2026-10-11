@@ -39,6 +39,9 @@ plugin("drop-affordance") {
                 }
             }
             onRequest { req -> if (Forms.actsOn(req, dropped)) fail("acted on $name: $method ${req.path}") else pending() }
+            // The resource, given again unmutated, holds a manifest that may list the act again,
+            // and acting on it is then what §6.2 asks.
+            onSuperseded { pass("was given the resource again, unmutated, before acting on $name") }
             onExpire { pass("never acted on $name") }
         }
     }

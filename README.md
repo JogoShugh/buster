@@ -269,7 +269,9 @@ Two things keep a run honest about what it judges:
   with a mutation, so the client keeps nothing of it. When the client enters the
   resource again and is answered a whole, unmutated representation, or a `304`
   that says the copy it holds is current, the window on the mutated one closes
-  (`onSuperseded`): what the client does with that is its own business.
+  (`onSuperseded`): what the client does with that is its own business. An
+  act's `2xx` answer counts too when its `Content-Location` names the resource:
+  it is the resource's new state, and may offer again an act that Buster dropped.
 
 `POST /_buster/campaign/off` returns to mutating by seed. With a plan in hand,
 the seed samples from the plan's combinations rather than from every response.

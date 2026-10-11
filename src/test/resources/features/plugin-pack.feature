@@ -147,6 +147,26 @@ Feature: The first plugin pack attacks the client rules the spec names
       | strip-forms-integrity  |
       | alias-forms-href       |
 
+  # An act's 2xx answer is a whole representation of the resource it names (RFC 9110 §8.7),
+  # as a GET's answer is. A client given the resource again, by an act, holds a manifest
+  # that may list the dropped act, and acting on it is then what §6.2 asks.
+  Scenario: drop-affordance: an act's unmutated answer that names the resource replaces the mutated one
+    Given only the "drop-affordance" plugin from the pack
+    And the dry run of that client sends PUT /beds/1/name
+    And an L0 Layer 1 response goes out to client "artie"
+    When client "artie" is answered an unmutated act response naming "/beds/1"
+    And client "artie" sends PUT /beds/1/name
+    And the run ends
+    Then the verdict for "drop-affordance" is pass
+
+  Scenario: drop-affordance: an act's answer that names another resource changes nothing
+    Given only the "drop-affordance" plugin from the pack
+    And the dry run of that client sends PUT /beds/1/name
+    And an L0 Layer 1 response goes out to client "artie"
+    When client "artie" is answered an unmutated act response naming "/beds/2"
+    And client "artie" sends PUT /beds/1/name
+    Then the verdict for "drop-affordance" is FAIL
+
   Scenario: Following the link before the fresh representation arrives still FAILs
     Given only the "drop-curie" plugin from the pack
     And the dry run of that client sends GET the forms link
