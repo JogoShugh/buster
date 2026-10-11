@@ -138,11 +138,11 @@ class PluginPackSteps(private val world: World) {
 
     @Given("an affordance set response goes out to client {string}")
     fun setGoesOut(client: String) =
-        world.immutableGoesOut("/forms/sha256-abc", client, "application/hal+json", fixture("set-embedded-schemas"))
+        world.immutableGoesOut("/forms/abc", client, "application/hal+json", fixture("set-embedded-schemas"))
 
     @Given("a schema response goes out to client {string}")
     fun schemaGoesOut(client: String) =
-        world.immutableGoesOut("/schemas/sha256-def", client, "application/schema+json", fixture("schema"))
+        world.immutableGoesOut("/schemas/def", client, "application/schema+json", fixture("schema"))
 
     @Then("the forms link has no integrity")
     fun noIntegrity() {
@@ -198,6 +198,6 @@ class PluginPackSteps(private val world: World) {
 
     private companion object {
         /** The forms link of the resource fixture. */
-        const val FORMS_HREF = "/forms/sha256-abc"
+        const val FORMS_HREF = "/forms/abc"
     }
 }

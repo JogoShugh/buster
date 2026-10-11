@@ -37,9 +37,9 @@ Feature: The first plugin pack attacks the client rules the spec names
     Examples:
       | plugin                 | response          | behaviour                         | requests                                                                       | result       |
       | strip-forms-integrity  | an L1 Layer 1     | refuses the link                  | GET /beds/1, GET /beds/2                                                       | pass         |
-      | strip-forms-integrity  | an L1 Layer 1     | follows the link                  | GET /forms/sha256-abc                                                          | FAIL         |
+      | strip-forms-integrity  | an L1 Layer 1     | follows the link                  | GET /forms/abc                                                                 | FAIL         |
       | drop-curie             | an L1 Layer 1     | treats hr:forms as unknown        | GET /beds/1, GET /beds/2                                                       | pass         |
-      | drop-curie             | an L1 Layer 1     | follows hr:forms anyway           | GET /forms/sha256-abc                                                          | FAIL         |
+      | drop-curie             | an L1 Layer 1     | follows hr:forms anyway           | GET /forms/abc                                                                 | FAIL         |
       | stale-etag             | an L1 Layer 1     | revalidates before acting         | GET /beds/1, PUT /beds/1/name                                                  | pass         |
       | stale-etag             | an L1 Layer 1     | gets 412, then re-syncs           | PUT /beds/1/name with the mutated ETag, GET /beds/1                            | pass         |
       | stale-etag             | an L1 Layer 1     | resubmits the stale act           | PUT /beds/1/name with the mutated ETag, PUT /beds/1/name with the mutated ETag | FAIL         |
@@ -51,17 +51,17 @@ Feature: The first plugin pack attacks the client rules the spec names
       | relax-layer1-cache     | a no-cache L1 Layer 1 | read it with no-cache, then stops | nothing                                                                    | pass         |
       | relax-layer1-cache     | an L1 Layer 1     | read it without no-cache, then stops | nothing                                                                     | FAIL         |
       | lie-preference-applied | an L1 Layer 1     | reads L0 and finds no affordances | GET /beds/2                                                                    | pass         |
-      | lie-preference-applied | an L1 Layer 1     | follows the forms link anyway     | GET /forms/sha256-abc                                                          | FAIL         |
+      | lie-preference-applied | an L1 Layer 1     | follows the forms link anyway     | GET /forms/abc                                                                 | FAIL         |
       | lie-preference-applied | an L1 Layer 1     | acts with no affordances          | PUT /beds/1/name                                                               | FAIL         |
       | alias-forms-href       | an L1 Layer 1     | follows the link it was given     | GET the forms link                                                             | pass         |
-      | alias-forms-href       | an L1 Layer 1     | builds the URL itself             | GET /forms/sha256-abc                                                          | FAIL         |
+      | alias-forms-href       | an L1 Layer 1     | builds the URL itself             | GET /forms/abc                                                                 | FAIL         |
       | drop-affordance        | an L0 Layer 1     | never acts on the dropped one     | GET /beds/1                                                                    | pass         |
       | drop-affordance        | an L0 Layer 1     | acts on the dropped one anyway    | PUT /beds/1/name                                                               | FAIL         |
-      | flip-byte              | an affordance set | refetches the set before acting   | GET /forms/sha256-abc, PUT /beds/1/name                                        | pass         |
+      | flip-byte              | an affordance set | refetches the set before acting   | GET /forms/abc, PUT /beds/1/name                                               | pass         |
       | flip-byte              | an affordance set | acts from the corrupted set       | PUT /beds/1/name                                                               | FAIL         |
       | flip-byte              | an affordance set | never uses the set, nor refetches it | nothing                                                                     | pass         |
       | alias-forms-href       | an L1 Layer 1     | never follows the link            | nothing                                                                        | FAIL         |
-      | flip-byte              | a schema          | refetches the schema              | GET /schemas/sha256-def                                                        | pass         |
+      | flip-byte              | a schema          | refetches the schema              | GET /schemas/def                                                               | pass         |
       | flip-byte              | a schema          | acts with the corrupted schema    | PUT /beds/1/name                                                               | FAIL         |
 
   Scenario Outline: <plugin>: a client whose log says <event> gets an attested pass

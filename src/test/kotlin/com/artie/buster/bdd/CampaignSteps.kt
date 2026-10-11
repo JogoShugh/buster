@@ -251,6 +251,6 @@ class CampaignSteps(private val world: World) {
 
     private companion object {
         const val SEED = 7L
-        const val FORMS_HREF = "/forms/sha256-abc"
+        const val FORMS_HREF = "/forms/abc"
     }
 }

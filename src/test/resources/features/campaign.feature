@@ -38,7 +38,7 @@ Feature: A campaign aims every mutation where the client will exercise the rule
   Scenario: flip-byte is armed only where the client acts using the set it fetched
     Given a campaign over the plugin pack
     And the campaign starts recording
-    And client "alice" requests GET "/forms/sha256-abc" and gets an affordance set
+    And client "alice" requests GET "/forms/abc" and gets an affordance set
     And client "alice" requests PUT "/beds/1/name" and gets an L1 Layer 1
     When the campaign is planned
     Then the plan arms "flip-byte" for client "alice" on request 1
