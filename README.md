@@ -462,3 +462,4 @@ git config core.hooksPath .githooks
 | Sample for any JSON API (`flaky-503`) | Built |
 | Folder watching (reload on change) | Planned; `PluginHost.reload()` exists |
 | Spring WebFlux filter, profile switch, report endpoint | Built |
+| CoAP (RFC 7252) | Not covered. Only the HTTP filter exists, so a server's CoAP endpoint is never mutated and a campaign covers its HTTP binding only. The core is not tied to HTTP; a CoAP adapter is parked in artie's `spec/ideas/buster-over-coap.md` |
