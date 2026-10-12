@@ -165,13 +165,35 @@ flipLetterInString()                        // one letter inside a JSON string; 
 answerWithProblem(503, "Service Unavailable", retryAfterSeconds = 1)
 
 detail("what else you changed")             // for anything the helpers did not note
-skipUnless(response.isSuccess, "only a success")   // guards: say what must hold
-skipIf(response.status == 404, "leave a 404 alone")
-skip("why this response is not the plugin's business")
 ```
 
 `response.status`, `response.headers` and `response.body` are also open to you directly, for a
 change no helper covers.
+
+### Guards: say what must hold
+
+Most of a plugin's first lines decide whether the response is its business at all. Write the
+condition the way you would describe the plugin, positively, and name the reason:
+
+```kotlin
+skipUnless(response.isSuccess, "only a success can turn flaky")
+skipUnless(response.isJson, "not JSON")
+skipIf('?' in href, "forms link already has a query")
+```
+
+| Guard | Leaves the response alone |
+| - | - |
+| `skipUnless(condition, reason)` | unless the condition holds. Prefer this one: it says what must be true. |
+| `skipIf(condition, reason)` | when the condition holds, for a condition that is already the thing to avoid. |
+| `value ?: skip(reason)` | when there is no value, and you need it next: `val href = doc.formsHref ?: skip("no forms link")`. |
+| `skip(reason)` | always; the general form, for the middle of a branch. |
+
+Two predicates on the response read the common cases: `response.isSuccess` (a 2xx) and
+`response.isJson` (a JSON `Content-Type`). A guard that stops a mutation is logged as
+`<plugin> skipped: <reason>`, so write the reason for the person reading the log.
+
+Avoid the backwards form. `if (response.status !in 200..299) skip(...)` makes the reader
+negate it twice to learn what the plugin is for; `skipUnless(response.isSuccess, ...)` states it.
 
 Three things the engine does for you:
 

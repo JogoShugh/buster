@@ -171,10 +171,20 @@ plugin("strip-forms-integrity") {
 }
 ```
 
+What you will use most, in the order a plugin uses it:
+
+| For | Write |
+| - | - |
+| Leaving a response alone | `skipUnless(response.isSuccess, "only a success")`, `skipIf(cond, "why")`, `value ?: skip("why")` |
+| Changing it | `header(name).replace(v)`, `.remove()`, `jsonBody`, `flipLetterInString()`, `answerWithProblem(...)`; each notes its own detail |
+| Saying what the client must be shown to do | `onlyWhere(client does get(path))`, with a matcher (`get`, `act(ifMatch = …)`, `anyAct`, `anyOf`, …) |
+| Saying what the client must do next | `expect(desc, window) { seeing(matcher) passes/fails "…" … }` |
+| Saying what doing nothing means | `silence passes "…"` or `silence fails "…"`, and `silenceMeans(Silence.FAIL)` on the plugin |
+
 The full guide is **[docs/DSL.md](docs/DSL.md)**. It covers the model (mutate, then expect),
-matchers, arming from a dry run, the rules inside `expect`, what silence means, the resource
-versus the action URL, a cookbook of real plugins, the escape hatch, testing a plugin, and
-a reference of every name.
+guards, matchers, arming from a dry run, the rules inside `expect`, what silence means, the
+resource versus the action URL, a cookbook of real plugins, the escape hatch, testing a
+plugin, and a reference of every name.
 
 ## Campaigns: aiming each mutation
 
