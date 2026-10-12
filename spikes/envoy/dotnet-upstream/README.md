@@ -13,40 +13,57 @@ representations. It is deliberately honest and not flaky. Buster supplies the fa
 
 State is a harvest count per bed, in memory. The count makes the ETag.
 
-## Run it
+## Get started
 
-With the .NET 8 SDK:
+You need Docker. You do not need the .NET SDK. Run from this folder
+(`spikes/envoy/dotnet-upstream`).
+
+**Run the service on :8081**
+
+```
+docker run -d --name garden-dotnet -p 8081:8081 -e ASPNETCORE_URLS=http://+:8081 \
+  -v "$PWD":/src -w /src mcr.microsoft.com/dotnet/sdk:8.0 dotnet run --project GardenUpstream
+```
+
+The first start downloads the image and packages. It is ready when this answers `ok`:
+
+```
+curl localhost:8081/health
+curl -i localhost:8081/beds/1
+```
+
+**Run the tests**
+
+```
+docker run --rm -v "$PWD":/src -w /src mcr.microsoft.com/dotnet/sdk:8.0 dotnet test GardenUpstream.Tests
+```
+
+**With the .NET SDK installed**, the same without Docker:
 
 ```
 dotnet run --project GardenUpstream --urls http://localhost:8081
 dotnet test GardenUpstream.Tests
 ```
 
-Without it, in Docker:
+**Stop**
 
 ```
-docker run --rm -p 8081:8081 -e ASPNETCORE_URLS=http://+:8081 -v "$PWD":/src -w /src \
-  mcr.microsoft.com/dotnet/sdk:8.0 dotnet run --project GardenUpstream
+docker rm -f garden-dotnet
 ```
 
 ## Put Buster in front of it
 
 Buster is a JVM program, and the service needs to know nothing about it. Envoy sits in
-front of the service and asks Buster, over gRPC, whether to change each response. From
-`spikes/envoy`:
+front of the service and asks Buster, over gRPC, whether to change each response.
+
+Start the service as above, then follow steps 2 to 4 in
+[../README.md](../README.md#get-started): start the Buster processor with `--no-upstream`,
+start Envoy, then:
 
 ```
-./gradlew installDist
-build/install/envoy-spike/bin/envoy-spike plugins --no-upstream &
-docker run -d --name buster-envoy -p 10000:10000 \
-  -v $PWD/envoy.yaml:/etc/envoy/envoy.yaml envoyproxy/envoy:v1.31-latest
-
-curl -i http://localhost:10000/beds/1            # 503 problem+json, Retry-After: 1
-curl -i http://localhost:8081/beds/1             # the service itself, unchanged
+curl -i localhost:8081/beds/1     # the service itself, unchanged
+curl -i localhost:10000/beds/1    # through Envoy and Buster: 503 problem+json, Retry-After: 1
 ```
-
-`--no-upstream` tells the processor not to start its own stand-in service on `:8081`.
-Envoy reaches the service and the processor through `host.docker.internal`.
 
 ## What to look at
 

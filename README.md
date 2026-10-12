@@ -428,7 +428,12 @@ src/main/kotlin/com/artie/buster/
 plugins/    the H.E.A.R.T. pack, one script per mutation
 samples/    plugins for ordinary servers, such as flaky-503
 docs/       DSL.md, the guide to writing plugins
+spikes/     envoy: Buster behind Envoy as an ext_proc processor, with a .NET service to try it on
 ```
+
+The Spring filter is one front door. `spikes/envoy` shows another: Envoy calls Buster over
+gRPC for each exchange, so the server behind it can be written in any language. It is a
+spike, not a supported adapter; see [spikes/envoy/README.md](spikes/envoy/README.md).
 
 ## Building and the gates
 
