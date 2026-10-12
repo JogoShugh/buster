@@ -45,7 +45,7 @@ services:
   # Run on request: `docker compose run --rm tests`.
   tests:
     profiles: ["tests"]
-    image: mcr.microsoft.com/dotnet/sdk:8.0
+    image: mcr.microsoft.com/dotnet/sdk:10.0
     working_dir: /src
     command: ["dotnet", "test", "GardenUpstream.Tests"]
     volumes:

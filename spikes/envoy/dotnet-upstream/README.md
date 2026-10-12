@@ -1,6 +1,6 @@
 # GardenUpstream: a .NET service to put Buster in front of
 
-A small ASP.NET Core (.NET 8, Minimal API) service that serves garden beds as HAL
+A small ASP.NET Core (.NET 10, Minimal API) service that serves garden beds as HAL
 representations. It is deliberately honest and not flaky. Buster supplies the faults.
 
 ## The resources
@@ -35,7 +35,7 @@ You need Docker. You do not need the .NET SDK. Run from this folder
 
 ```
 docker run -d --name garden-dotnet -p 8081:8081 -e ASPNETCORE_URLS=http://+:8081 \
-  -v "$PWD":/src -w /src mcr.microsoft.com/dotnet/sdk:8.0 dotnet run --project GardenUpstream
+  -v "$PWD":/src -w /src mcr.microsoft.com/dotnet/sdk:10.0 dotnet run --project GardenUpstream
 ```
 
 The first start downloads the image and packages. It is ready when this answers `ok`:
@@ -48,7 +48,7 @@ curl -i localhost:8081/beds/1
 **Run the tests**
 
 ```
-docker run --rm -v "$PWD":/src -w /src mcr.microsoft.com/dotnet/sdk:8.0 dotnet test GardenUpstream.Tests
+docker run --rm -v "$PWD":/src -w /src mcr.microsoft.com/dotnet/sdk:10.0 dotnet test GardenUpstream.Tests
 ```
 
 **With the .NET SDK installed**, the same without Docker:

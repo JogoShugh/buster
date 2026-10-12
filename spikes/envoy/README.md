@@ -69,7 +69,7 @@ Pick one.
 ```
 docker run -d --name garden-dotnet -p 8081:8081 -e ASPNETCORE_URLS=http://+:8081 \
   -v "$PWD/dotnet-upstream":/src -w /src \
-  mcr.microsoft.com/dotnet/sdk:8.0 dotnet run --project GardenUpstream
+  mcr.microsoft.com/dotnet/sdk:10.0 dotnet run --project GardenUpstream
 ```
 
 See [dotnet-upstream/README.md](dotnet-upstream/README.md). The first start downloads the
@@ -126,7 +126,7 @@ docker rm -f buster-envoy garden-dotnet
   by compose service name.
 - `compose.yaml`, `Dockerfile.processor`, `demo.sh`: the all-Docker run.
 - `plugins/always-503.buster.kts`: a plugin that turns any success into a 503 problem.
-- `dotnet-upstream/`: a .NET 8 service to put in front.
+- `dotnet-upstream/`: a .NET 10 service to put in front.
 
 The core is not copied: `settings.gradle.kts` includes the repo root as a composite build.
 
