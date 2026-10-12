@@ -36,6 +36,29 @@ class DslSteps(private val world: World) {
         assertTrue("$plugin skipped: $reason" in notes) { "notes: $notes" }
     }
 
+    /** A fenced kotlin block that declares a plugin is a whole script; any other block is a fragment. */
+    @Then("every plugin example in {string} loads, and there are at least {int}")
+    fun examplesLoad(guide: String, atLeast: Int) {
+        val blocks = Regex("```kotlin\\n(.*?)```", RegexOption.DOT_MATCHES_ALL)
+            .findAll(Files.readString(Path.of(guide))).map { it.groupValues[1] }
+            .filter { "plugin(\"" in it }.toList()
+        assertTrue(blocks.size >= atLeast) { "only ${blocks.size} plugin examples in $guide" }
+        blocks.forEachIndexed { n, source ->
+            val dir = Files.createTempDirectory("buster-guide")
+            try {
+                Files.writeString(dir.resolve("example-$n.buster.kts"), source)
+                val report = PluginHost(dir).reload()
+                assertEquals(emptyList<Any>(), report.failures) { "example $n:\n$source" }
+                assertEquals(1, report.plugins.size) { "example $n declares ${report.plugins.size} plugins:\n$source" }
+            } finally {
+                dir.toFile().deleteRecursively()
+            }
+        }
+    }
+
+    @Then("the README links to {string}")
+    fun readmeLinks(target: String) = assertTrue(target in Files.readString(Path.of("README.md")))
+
     @Given("a plain text response for {string} goes out to client {string}")
     fun plainText(path: String, client: String) = world.plainTextGoesOut(path, client)
 

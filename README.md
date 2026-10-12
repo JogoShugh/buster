@@ -144,95 +144,37 @@ script calls `plugin(...)` directly.
   compiler's messages, then skipped. The other scripts still load.
 - One script may declare several plugins.
 
-### A plugin, start to finish
+### Writing one
+
+A plugin says what it changes and what the client must do about it. This is the smallest
+one that does both; the sample [below](#a-sample-for-any-json-api) is a complete one.
 
 ```kotlin
-// plugins/strip-forms-integrity.buster.kts
 plugin("strip-forms-integrity") {
     spec("§6.5")
     on(Layer.RESOURCE)
-    rungs(Rung.L1, Rung.L2)
 
     mutate {
-        val doc = json() ?: skip("body is not a JSON object")
-        val link = Hal.link(doc, Hal.FORMS_REL) ?: skip("no forms link")
-        val href = link.path("href").asText()
-        link.remove("integrity")
+        val doc = jsonBody
+        val link = doc.formsLink ?: skip("no forms link")
+        val href = doc.formsHref ?: skip("forms link has no href")
+        link.remove("integrity") ?: skip("forms link already has no integrity")
+        val follows = get(href)
+        onlyWhere(client does follows)      // only where the dry run shows the client following it
         writeJson(doc)
-        detail("removed integrity from the forms link $href")
 
         expect("refuse to follow a forms link without integrity", window = 5) {
-            onRequest { req ->
-                if (req.isGet && req.path == href) fail("followed $href") else pending()
-            }
-            onExpire { pass("never followed $href") }
+            seeing(follows) fails "followed $href"
+            silence passes "never followed $href"
         }
     }
 }
 ```
 
-### The DSL
-
-At the top level of a script:
-
-| Call | Meaning |
-| - | - |
-| `plugin(name) { ... }` | Declares one plugin. |
-
-Inside `plugin { ... }`:
-
-| Call | Meaning |
-| - | - |
-| `spec("§6.2", ...)` | The spec sections or RFCs the plugin attacks. Logged with each mutation. |
-| `on(Layer.RESOURCE, ...)` | The layers it applies to. Required. `Layer.OTHER` is any response that is not H.E.A.R.T. |
-| `rungs(Rung.L1, ...)` | The rungs it applies to. Default: every rung. |
-| `weight(n)` | Relative chance of being picked. Default 1. |
-| `silenceMeans(Silence.FAIL)` | What a client that does nothing after the mutation means. Default `Silence.PASS`. A `FAIL` plugin is made only with a dry run, and only after `onlyWhere` says what the client must be shown to do. |
-| `mutate { ... }` | What the plugin does to a response. Required. |
-
-Inside `mutate { ... }`:
-
-| Call | Meaning |
-| - | - |
-| `request`, `response`, `classification` | The exchange. The request is read-only. |
-| `random` | The seeded random source for this exchange. Use only this, so replay works. |
-| `resourcePath` | The path of the resource this response is the state of: `Content-Location` (RFC 9110 §8.7), else the HAL self link, else the request path. An act answers at its action URL, so it is the resource, not `request.path`, that a later read is of. |
-| `future` | What this client sent after this request in the dry run (see [Campaigns](#campaigns-aiming-each-mutation)), or `null` with no dry run. Skip when the client never exercises the rule. |
-| `get(path)`, `act(ifMatch = etag)`, `act(on = form)`, `anyAct`, `anyOf(...)`, `.with(cacheControl = "no-cache")` | Matchers: values that test a request. The same one arms a mutation and judges the client, so the two cannot drift apart. They are available inside `expect` too. |
-| `onlyWhere(client does matcher)` | Make the mutation only where the dry run shows the client doing that. Skips, with a reason that names the action, when it never does. |
-| `json()` / `writeJson(node)` | Read the body as a JSON object, write it back. |
-| `jsonBody` | The body as a JSON object; skips the mutation when it is not one. `jsonBody.formsLink` and `.formsHref` read the forms link. |
-| `header(name).replace(value)` / `.remove()` | Change a header. The change is noted in the detail as it is made: `ETag "s1" became "x"`, `removed Preference-Applied: forms=link`. `.value` reads it. |
-| `flipLetterInString()` | Change one letter inside a JSON string, so the body is still valid JSON. Seeded; skips when there is none. |
-| `answerWithProblem(status, title, retryAfterSeconds)` | Turn the response into an RFC 9457 problem. |
-| `detail(text)` | What else was changed, for the log. The helpers above write their own. |
-| `skip(reason)` | Leave the response alone. The skip is logged. |
-| `keepCacheControl()` | Ask to keep the plugin's `Cache-Control`. Honoured only if the body is unchanged. |
-| `expect(description, window) { ... }` | What the client must do next. |
-
-Inside `expect { ... }`:
-
-| Call | Meaning |
-| - | - |
-| `trigger` | The request whose response was mutated, so a plugin can judge the read that got the mutation. |
-| `seeing(matcher) passes "…"` / `fails "…"` | What a later request from the same client means. The reason can be a block that reads the request: `seeing(anyAct) fails { "acted on ${it.path}" }`. The first rule that matches decides the request. |
-| `seeing(matcher) { req -> outcome }` | The same, with the whole decision in the block. |
-| `seeing(logs("event.name")) attests "…"` | A line of the client's log that matches attests a pass. Narrow with `.thisResponse`, `.about(path)`, `.with("heart.rel", "rename")`. |
-| `already(matcher)` | Whether the client did that earlier in this window. A rule asks; no flag is kept. |
-| `resource` | The path of the resource the mutated response is the state of. |
-| `silence passes "…"` / `fails "…"` | What silence means. Required, as is `onExpire`; one of them. |
-| `superseded passes "…"` | What it means that the client was given the resource again, whole and unmutated. |
-| `onRequest { req -> outcome }` | Runs on each later request from the same client, when no `seeing` rule matched. |
-| `onEvent { event -> outcome }` | Runs on each line of the same client's event log. It can only `attest(reason)` a pass. |
-| `onExpire { decided }` | Required. What silence means: the client is done, or the round ended, and nothing settled it. It can only return `pass(reason)` or `fail(reason)`. |
-| `pass(reason)`, `fail(reason)`, `attest(reason)`, `pending()` | The outcomes. `pending()` is for `onRequest` and `onEvent` only. |
-
-An expectation without `onExpire` is refused, and `onExpire { pending() }` does
-not compile. A check that could not be judged cannot be written, so a plugin
-has to decide what its silence means: for some rules a client that never
-exercises them has nothing to answer for (a pass); for others, never making
-the act the rule is about is the failure. Closing a window always runs that
-rule, even for a client that sent no request after the mutation.
+The full guide is **[docs/DSL.md](docs/DSL.md)**. It covers the model (mutate, then expect),
+matchers, arming from a dry run, the rules inside `expect`, what silence means, the resource
+versus the action URL, a cookbook of real plugins, the escape hatch, testing a plugin, and
+a reference of every name.
 
 ## Campaigns: aiming each mutation
 
@@ -475,6 +417,7 @@ src/main/kotlin/com/artie/buster/
   spring/   the WebFlux filter and the profile-gated auto-configuration
 plugins/    the H.E.A.R.T. pack, one script per mutation
 samples/    plugins for ordinary servers, such as flaky-503
+docs/       DSL.md, the guide to writing plugins
 ```
 
 ## Building and the gates
