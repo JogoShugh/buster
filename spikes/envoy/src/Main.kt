@@ -23,9 +23,13 @@ fun main(args: Array<String>) {
     println("plugins ${report.plugins.joinToString { it.name }}")
     val engine = Engine(report.plugins, SEED, MutationLog(null))
 
-    upstream().start()
+    // --no-upstream: something else (the .NET service, say) already answers on :8081.
+    if ("--no-upstream" !in args) {
+        upstream().start()
+        println("upstream :$UPSTREAM_PORT")
+    }
     val server = NettyServerBuilder.forPort(PROCESSOR_PORT).addService(ExtProc(engine)).build().start()
-    println("upstream :$UPSTREAM_PORT, ext_proc :$PROCESSOR_PORT")
+    println("ext_proc :$PROCESSOR_PORT")
     server.awaitTermination()
 }
 

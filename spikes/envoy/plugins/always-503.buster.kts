@@ -2,7 +2,8 @@
 // about the client; it exists to show that a mutation made by Buster reaches the caller through Envoy.
 plugin("always-503") {
     spec("RFC 9110 §15.6.4")
-    on(Layer.OTHER)
+    // A HAL representation classifies as RESOURCE, plain JSON as OTHER; this spike wants both.
+    on(Layer.RESOURCE, Layer.OTHER)
     mutate {
         skipUnless(response.isSuccess, "only a success can turn into a 503")
         answerWithProblem(503, "Service Unavailable", retryAfterSeconds = 1)
