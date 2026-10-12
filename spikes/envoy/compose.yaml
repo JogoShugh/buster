@@ -1,0 +1,52 @@
+# Everything in containers: the .NET service, Buster as an Envoy processor, and Envoy.
+#
+#   docker compose up --build -d      start (first build takes a few minutes)
+#   docker compose run --rm demo      walk through what Buster does
+#   docker compose down               stop
+#
+# Callers use http://localhost:10000 (through Buster) or http://localhost:8081 (the service).
+name: buster-envoy
+
+services:
+  garden:
+    build: ./dotnet-upstream
+    ports:
+      - "8081:8081"
+
+  buster:
+    build:
+      context: ../..
+      dockerfile: spikes/envoy/Dockerfile.processor
+    volumes:
+      # Edit a plugin here, then `docker compose restart buster`.
+      - ./plugins:/plugins:ro
+
+  envoy:
+    image: envoyproxy/envoy:v1.31-latest
+    command: ["-c", "/etc/envoy/envoy.yaml"]
+    volumes:
+      - ./envoy.compose.yaml:/etc/envoy/envoy.yaml:ro
+    ports:
+      - "10000:10000"
+    depends_on:
+      - garden
+      - buster
+
+  # Run on request: `docker compose run --rm demo`.
+  demo:
+    profiles: ["demo"]
+    image: curlimages/curl:8.10.1
+    entrypoint: ["sh", "/demo.sh"]
+    volumes:
+      - ./demo.sh:/demo.sh:ro
+    depends_on:
+      - envoy
+
+  # Run on request: `docker compose run --rm tests`.
+  tests:
+    profiles: ["tests"]
+    image: mcr.microsoft.com/dotnet/sdk:10.0
+    working_dir: /src
+    command: ["dotnet", "test", "GardenUpstream.Tests"]
+    volumes:
+      - ./dotnet-upstream:/src

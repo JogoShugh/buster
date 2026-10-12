@@ -1,0 +1,16 @@
+# Buster as an Envoy ext_proc processor, as an image.
+# Build context is the repository root, because the spike builds the core by composite build:
+#   docker build -f spikes/envoy/Dockerfile.processor -t buster-processor .
+FROM eclipse-temurin:21-jdk AS build
+WORKDIR /repo
+COPY . .
+WORKDIR /repo/spikes/envoy
+RUN ./gradlew --no-daemon --console=plain installDist
+
+FROM eclipse-temurin:21-jre
+COPY --from=build /repo/spikes/envoy/build/install/envoy-spike /opt/buster
+# The plugin scripts it loads. Mount a folder over /plugins to use your own.
+COPY spikes/envoy/plugins /plugins
+EXPOSE 9002
+# --no-upstream: the processor only judges; the server behind Envoy is somebody else's.
+ENTRYPOINT ["/opt/buster/bin/envoy-spike", "/plugins", "--no-upstream"]
