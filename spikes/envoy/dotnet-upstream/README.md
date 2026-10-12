@@ -13,7 +13,20 @@ representations. It is deliberately honest and not flaky. Buster supplies the fa
 
 State is a harvest count per bed, in memory. The count makes the ETag.
 
-## Get started
+## Quickest: the whole demo in Docker
+
+You need Docker with Compose, and nothing else. From `spikes/envoy` (the folder above):
+
+```
+docker compose up --build -d      # this service, Buster, and Envoy; first build takes a few minutes
+docker compose run --rm demo      # four steps showing what Buster does to it
+docker compose down
+```
+
+The service is on `localhost:8081`; through Buster it is on `localhost:10000`.
+The rest of this page is the service on its own.
+
+## Get started: the service on its own
 
 You need Docker. You do not need the .NET SDK. Run from this folder
 (`spikes/envoy/dotnet-upstream`).
@@ -56,9 +69,10 @@ docker rm -f garden-dotnet
 Buster is a JVM program, and the service needs to know nothing about it. Envoy sits in
 front of the service and asks Buster, over gRPC, whether to change each response.
 
-Start the service as above, then follow steps 2 to 4 in
-[../README.md](../README.md#get-started): start the Buster processor with `--no-upstream`,
-start Envoy, then:
+The easy way is `docker compose up --build -d` in `spikes/envoy`, as at the top of this page.
+To run the pieces on the host instead, start the service as above, then follow steps 2 to 4
+in [../README.md](../README.md#get-started-pieces-on-the-host): start the Buster processor
+with `--no-upstream`, start Envoy, then:
 
 ```
 curl -i localhost:8081/beds/1     # the service itself, unchanged

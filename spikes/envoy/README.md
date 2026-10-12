@@ -14,10 +14,51 @@ caller --> Envoy :10000 --> your server :8081
         Buster processor
 ```
 
-## Get started
+## Get started: everything in Docker
 
-You need **Docker**, and a **JDK 21** for the Buster processor. Other JDK versions can fail
-under Gradle here; point `JAVA_HOME` at a 21. Run everything from this folder (`spikes/envoy`).
+You need **Docker** with Compose. Nothing else: no JDK, no .NET SDK. Run from this folder
+(`spikes/envoy`).
+
+```
+docker compose up --build -d      # builds and starts three containers; first build takes a few minutes
+docker compose run --rm demo      # walks through what Buster does, in four steps
+```
+
+The three containers:
+
+| Service | What | Port on your machine |
+| --- | --- | --- |
+| `garden` | the .NET service ([dotnet-upstream](dotnet-upstream/README.md)) | `8081` |
+| `buster` | Buster as an Envoy processor, built from the repository ([Dockerfile.processor](Dockerfile.processor)) | none |
+| `envoy` | the front door, asking Buster about every exchange | `10000` |
+
+Try it by hand:
+
+```
+curl -i localhost:8081/beds/1     # the service itself: 200
+curl -i localhost:10000/beds/1    # through Envoy and Buster: 503 problem+json, Retry-After: 1
+```
+
+Change what Buster does: edit or remove a script in `plugins/`, then
+`docker compose restart buster`. With no plugin loaded, responses pass through unchanged.
+
+Run the .NET service's tests: `docker compose run --rm tests`.
+
+Stop: `docker compose down`.
+
+The Buster image alone, to use in your own setup (build context is the repository root):
+
+```
+docker build -f spikes/envoy/Dockerfile.processor -t buster-processor .
+docker run --rm -p 9002:9002 -v "$PWD/spikes/envoy/plugins":/plugins:ro buster-processor
+```
+
+Point Envoy's `ext_proc` filter at `:9002`; [envoy.compose.yaml](envoy.compose.yaml) shows how.
+
+## Get started: pieces on the host
+
+For working on the adapter itself. You need **Docker** and a **JDK 21** for the processor;
+other JDK versions can fail under Gradle here, so point `JAVA_HOME` at a 21.
 
 ### 1. Start a server on :8081
 
@@ -80,7 +121,10 @@ docker rm -f buster-envoy garden-dotnet
 - `src/Main.kt`: starts the processor on `:9002`, and a trivial JSON stand-in on `:8081`
   unless `--no-upstream` is given.
 - `envoy.yaml`: Envoy on `:10000` in front of `:8081`, `ext_proc` asked for request headers,
-  response headers and the whole response body (BUFFERED).
+  response headers and the whole response body (BUFFERED). It reaches the host through
+  `host.docker.internal`. `envoy.compose.yaml` is the same, reaching `garden` and `buster`
+  by compose service name.
+- `compose.yaml`, `Dockerfile.processor`, `demo.sh`: the all-Docker run.
 - `plugins/always-503.buster.kts`: a plugin that turns any success into a 503 problem.
 - `dotnet-upstream/`: a .NET 8 service to put in front.
 

@@ -433,7 +433,9 @@ spikes/     envoy: Buster behind Envoy as an ext_proc processor, with a .NET ser
 
 The Spring filter is one front door. `spikes/envoy` shows another: Envoy calls Buster over
 gRPC for each exchange, so the server behind it can be written in any language. It is a
-spike, not a supported adapter; see [spikes/envoy/README.md](spikes/envoy/README.md).
+spike, not a supported adapter, and it runs whole in Docker: from `spikes/envoy`,
+`docker compose up --build -d`, then `docker compose run --rm demo`. See
+[spikes/envoy/README.md](spikes/envoy/README.md).
 
 ## Building and the gates
 
