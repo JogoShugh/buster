@@ -103,3 +103,42 @@ Feature: A mutation says what it changed, and the log is written for it
     When a plain JSON response for "/todos/1" goes out to client "app"
     Then the response went out as 503 with Retry-After "1" and Cache-Control "no-store"
     And the logged mutation detail is "GET /todos/1 answered 503, Retry-After 1"
+
+  # A guard says what must hold for the mutation to be made, not what must not, so the
+  # condition reads the way the plugin is described: only a success, only JSON.
+  Scenario Outline: skipUnless and skipIf guard a mutation, and a skip names its reason
+    Given the plugin script:
+      """
+      plugin("guarded") {
+          on(Layer.OTHER)
+          mutate {
+              <guard>
+              answerWithProblem(503, "Service Unavailable")
+          }
+      }
+      """
+    When <response> goes out to client "app"
+    Then the response <outcome>
+
+    Examples:
+      | guard                                                         | response                                        | outcome                                      |
+      | skipUnless(response.isSuccess, "only a success")             | a plain JSON response for "/todos/1"            | was changed                                  |
+      | skipUnless(response.isSuccess, "only a success")             | a 404 problem response for "/todos/9"           | went out unchanged                           |
+      | skipUnless(response.isJson, "only JSON")                      | a plain JSON response for "/todos/1"            | was changed                                  |
+      | skipUnless(response.isJson, "only JSON")                      | a plain text response for "/todos/1"            | went out unchanged                           |
+      | skipIf(response.status == 404, "leave a 404 alone")           | a 404 problem response for "/todos/9"           | went out unchanged                           |
+      | skipIf(response.status == 404, "leave a 404 alone")           | a plain JSON response for "/todos/1"            | was changed                                  |
+
+  Scenario: A guard that stops a mutation says why
+    Given the plugin script:
+      """
+      plugin("guarded") {
+          on(Layer.OTHER)
+          mutate {
+              skipUnless(response.isSuccess, "only a success can turn flaky")
+              answerWithProblem(503, "Service Unavailable")
+          }
+      }
+      """
+    When a 404 problem response for "/todos/9" goes out to client "app"
+    Then "guarded" was skipped because "only a success can turn flaky"

@@ -10,7 +10,7 @@ plugin("drop-affordance") {
         val doc = jsonBody
         val forms = Forms.embedded(doc) ?: skip("no embedded affordances")
         val names = forms.fieldNames().asSequence().toList()
-        if (names.isEmpty()) skip("no affordances")
+        skipIf(names.isEmpty(), "no affordances")
         // With a dry run, drop the affordance the client goes on to act on. Without one, any.
         val name = future?.let { seen ->
             names.firstOrNull { n -> seen.any { Forms.actsOn(it, forms.get(n)) } }
@@ -21,9 +21,8 @@ plugin("drop-affordance") {
         val target = Forms.target(dropped) ?: skip("affordance $name has no target")
         forms.remove(name)
         // Another affordance with the same method and target would make an act on it legal.
-        if (forms.elements().asSequence().any { Forms.method(it) == method && Forms.target(it) == target }) {
-            skip("another affordance shares $method $target")
-        }
+        val shared = forms.elements().asSequence().any { Forms.method(it) == method && Forms.target(it) == target }
+        skipIf(shared, "another affordance shares $method $target")
         writeJson(doc)
         detail("dropped affordance $name ($method $target)")
 

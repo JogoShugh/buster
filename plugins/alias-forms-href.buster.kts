@@ -13,7 +13,7 @@ plugin("alias-forms-href") {
         val doc = jsonBody
         val link = doc.formsLink ?: skip("no forms link")
         val href = doc.formsHref ?: skip("forms link has no href")
-        if ('?' in href) skip("forms link already has a query")
+        skipIf('?' in href, "forms link already has a query")
         val follows = get(href)
         onlyWhere(client does follows)
         val alias = "buster=%08x".format(random.nextInt())

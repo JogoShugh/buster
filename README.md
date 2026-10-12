@@ -258,15 +258,15 @@ plugin("flaky-503") {
     silenceMeans(Silence.FAIL)
 
     mutate {
-        if (response.status !in 200..299) skip("only a success can turn flaky")
-        if ("json" !in response.headers["Content-Type"].orEmpty()) skip("not JSON")
-        val method = request.method
+        skipUnless(response.isSuccess, "only a success can turn flaky")
+        skipUnless(response.isJson, "not JSON")
         val path = request.path
+        val retry = request(request.method, path)
         onlyWhere(client does anyRequestTo(path))
         answerWithProblem(503, "Service Unavailable", retryAfterSeconds = 1)
 
         expect("retry $path rather than change it unread", window = 3) {
-            seeing(request(method, path)) passes "retried $method $path"
+            seeing(retry) passes "retried $retry"
             seeing(actAt(path)) fails { "${it.method} $path without reading it first" }
             silence fails "never retried $path"
         }

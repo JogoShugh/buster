@@ -23,9 +23,8 @@ plugin("relax-layer1-cache") {
 
     mutate {
         // The resource to read again, which for an act's response is not the action URL.
-        val reads = get(resourcePath)
-        val gotByRead = request.isGet
-        if (!gotByRead) onlyWhere(client does reads)
+        // An act's response was got by a write: made only where the client reads the resource again.
+        if (request.isAct) onlyWhere(client does get(resourcePath))
         header("Cache-Control").replace("private, max-age=3600")
         keepCacheControl()
 
@@ -34,10 +33,11 @@ plugin("relax-layer1-cache") {
             seeing(get(resource)) fails "re-read $resource without no-cache"
             // The read that got this response is wire evidence too, and the client is done with
             // it already: silence at the end is judged on it. A write has no directive to judge.
-            if (!gotByRead || get(trigger.path).with(cacheControl = "no-cache").matches(trigger)) {
-                silence passes "did not re-read $resource without no-cache"
-            } else {
+            val readWithoutNoCache = trigger.isGet && !get(trigger.path).with(cacheControl = "no-cache").matches(trigger)
+            if (readWithoutNoCache) {
                 silence fails "read $resource without no-cache, and no later read said it"
+            } else {
+                silence passes "did not re-read $resource without no-cache"
             }
         }
     }

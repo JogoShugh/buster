@@ -71,15 +71,15 @@ plugin("flaky-503") {
     silenceMeans(Silence.FAIL)
 
     mutate {
-        if (response.status !in 200..299) skip("only a success can turn flaky")
-        if ("json" !in response.headers["Content-Type"].orEmpty()) skip("not JSON")
-        val method = request.method
+        skipUnless(response.isSuccess, "only a success can turn flaky")
+        skipUnless(response.isJson, "not JSON")
         val path = request.path
+        val retry = request(request.method, path)
         onlyWhere(client does anyRequestTo(path))
         answerWithProblem(503, "Service Unavailable", retryAfterSeconds = 1)
 
         expect("retry $path rather than change it unread", window = 3) {
-            seeing(request(method, path)) passes "retried $method $path"
+            seeing(retry) passes "retried $retry"
             seeing(actAt(path)) fails { "${it.method} $path without reading it first" }
             silence fails "never retried $path"
         }
@@ -95,8 +95,8 @@ Read it top to bottom:
   ([section 3](#3-where-a-plugin-applies)).
 - `silenceMeans(Silence.FAIL)` says that a client that does nothing has failed
   ([section 7](#7-what-silence-means)).
-- In `mutate`, the two `skip(...)` lines leave responses alone that are not the plugin's
-  business. `onlyWhere(...)` makes the mutation only where the dry run shows the client
+- In `mutate`, the two `skipUnless(...)` guards leave responses alone that are not the plugin's
+  business. A guard says what must hold, so it reads the way the plugin is described. `onlyWhere(...)` makes the mutation only where the dry run shows the client
   using this path ([section 5](#5-arming-a-mutation-the-dry-run)). `answerWithProblem(...)`
   changes the response.
 - `expect(...)` says what the client must do next, as rules
@@ -165,6 +165,8 @@ flipLetterInString()                        // one letter inside a JSON string; 
 answerWithProblem(503, "Service Unavailable", retryAfterSeconds = 1)
 
 detail("what else you changed")             // for anything the helpers did not note
+skipUnless(response.isSuccess, "only a success")   // guards: say what must hold
+skipIf(response.status == 404, "leave a 404 alone")
 skip("why this response is not the plugin's business")
 ```
 
@@ -459,7 +461,7 @@ plugin("drop-affordance") {
         val doc = jsonBody
         val forms = Forms.embedded(doc) ?: skip("no embedded affordances")
         val names = forms.fieldNames().asSequence().toList()
-        if (names.isEmpty()) skip("no affordances")
+        skipIf(names.isEmpty(), "no affordances")
         // With a dry run, drop the affordance the client goes on to act on. Without one, any.
         val name = future?.let { seen ->
             names.firstOrNull { n -> seen.any { Forms.actsOn(it, forms.get(n)) } }
@@ -470,9 +472,8 @@ plugin("drop-affordance") {
         val target = Forms.target(dropped) ?: skip("affordance $name has no target")
         forms.remove(name)
         // Another affordance with the same method and target would make an act on it legal.
-        if (forms.elements().asSequence().any { Forms.method(it) == method && Forms.target(it) == target }) {
-            skip("another affordance shares $method $target")
-        }
+        val shared = forms.elements().asSequence().any { Forms.method(it) == method && Forms.target(it) == target }
+        skipIf(shared, "another affordance shares $method $target")
         writeJson(doc)
         detail("dropped affordance $name ($method $target)")
 
@@ -502,7 +503,7 @@ plugin("lie-preference-applied") {
     mutate {
         header("Preference-Applied").value ?: skip("no Preference-Applied")
         val doc = jsonBody
-        if (Forms.embedded(doc) != null) skip("affordances are embedded, so L0 is not a lie")
+        skipIf(Forms.embedded(doc) != null, "affordances are embedded, so L0 is not a lie")
         val href = doc.formsHref ?: skip("no forms link")
         // Only where the client follows the link, so there is something to refuse.
         val follows = get(href)
@@ -549,7 +550,7 @@ plugin("busy-429") {
     silenceMeans(Silence.FAIL)
 
     mutate {
-        if (response.status !in 200..299) skip("only a success can turn busy")
+        skipUnless(response.isSuccess, "only a success can turn busy")
         val path = request.path
         onlyWhere(client does anyRequestTo(path))
         answerWithProblem(429, "Too Many Requests", retryAfterSeconds = 2)
@@ -657,7 +658,9 @@ client, the mutation, the verdict and its reason.
 | `flipLetterInString()` | Change one letter inside a JSON string. |
 | `answerWithProblem(status, title, retryAfterSeconds)` | Turn the response into an RFC 9457 problem. |
 | `detail(text)` | What else was changed, for the log. |
+| `skipUnless(condition, reason)`, `skipIf(condition, reason)` | Leave the response alone unless the condition holds, or when it does. |
 | `skip(reason)` | Leave the response alone. |
+| `response.isSuccess`, `response.isJson` | A 2xx; a JSON `Content-Type`. |
 | `keepCacheControl()` | Keep the plugin's `Cache-Control`, if the body bytes are unchanged. |
 | `expect(description, window) { ... }` | What the client must do next. |
 

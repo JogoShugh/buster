@@ -10,7 +10,7 @@ plugin("lie-preference-applied") {
     mutate {
         header("Preference-Applied").value ?: skip("no Preference-Applied")
         val doc = jsonBody
-        if (Forms.embedded(doc) != null) skip("affordances are embedded, so L0 is not a lie")
+        skipIf(Forms.embedded(doc) != null, "affordances are embedded, so L0 is not a lie")
         val href = doc.formsHref ?: skip("no forms link")
         // Only where the client follows the link, so there is something to refuse.
         val follows = get(href)

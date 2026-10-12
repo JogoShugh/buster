@@ -79,6 +79,12 @@ class BusterResponse(
     val headers: Headers,
     var body: ByteArray,
 ) {
+    /** A 2xx. */
+    val isSuccess: Boolean get() = status in SUCCESS_RANGE
+
+    /** The Content-Type says JSON: application/json, application/problem+json, application/hal+json. */
+    val isJson: Boolean get() = "json" in headers["Content-Type"].orEmpty().lowercase()
+
     fun copy() = BusterResponse(status, headers.copy(), body.copyOf())
 
     /** Makes this response hold exactly what [other] holds. */
@@ -88,6 +94,10 @@ class BusterResponse(
         body = other.body
     }
 }
+
+private const val FIRST_SUCCESS = 200
+private const val LAST_SUCCESS = 299
+private val SUCCESS_RANGE = FIRST_SUCCESS..LAST_SUCCESS
 
 /** What Buster decided a response is. */
 data class Classification(val layer: Layer, val rung: Rung, val dialect: Dialect)
